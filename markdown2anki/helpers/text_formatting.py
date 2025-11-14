@@ -104,7 +104,8 @@ def replace_symbols(text: str) -> str:
     # Dictionary with mappings from text to unicode symbols
     mappings = {
         "->": "→",
-        "=>": "⇒"
+        "=>": "⇒",
+        "• ": "- "
     }
 
     for replace_key in mappings.keys():
@@ -216,15 +217,76 @@ def ignore_image_resizing_in_html(text: str) -> str:
 
 
 def cloze_safe_math_jax(text: str) -> str:
-    mathjax_pattern = r"(\$\$.*?\$\$|\$.*?\$)"
+    """
+    Make mathjax expressions safe for cloze deletions by replacing {{ and }} with { { and } }
+    :param text: given text
+    :return: processed text
+    """
+    mathjax_pattern = r"(\\\[.*?\\\]|\\\(.*?\\\))"
+
     def replace_brackets(match):
         return match.group(0).replace("{{", "{ {").replace("}}", "} }")
-    return re.sub(mathjax_pattern, replace_brackets, text)
 
+    return re.sub(mathjax_pattern, replace_brackets, text, flags=re.DOTALL)
+
+def remove_keyword_lines(text: str, keywords: list) -> str:
+    """
+    Remove all lines that only contain whitespaces and the keyword (ignoring HTML tags)
+    NOTE: This cannot be used as a general processor since it needs the keywords as input
+    :param text: given text
+    :param keywords: list of keywords
+    :return: processed text
+    """
+    lines = text.split("\n")
+    processed_lines = []
+
+    for line in lines:
+        # Remove HTML tags to check the actual content
+        stripped_line = re.sub(r'<[^>]+>', '', line).strip()
+
+        if not any(stripped_line == keyword for keyword in keywords):
+            processed_lines.append(line)
+
+    return "\n".join(processed_lines)
+
+
+def remove_new_lines_for_display_math_blocks(text: str) -> str:
+    """
+    Remove new lines before display math blocks ($$...$$) and selectively after them.
+    Preserves newlines after blocks if followed by bullet points or enumerations.
+    :param text: given text
+    :return: processed text
+    """
+    # Pattern to match display math blocks with potential surrounding newlines
+    pattern = r'(\n*)\$\$(.*?)\$\$(\n*)(?=\s*[-\d])'
+
+    def process_block(match):
+        # Always remove leading newlines
+        block_content = match.group(2)
+        trailing_newlines = match.group(3)
+        next_char = match.string[match.end():match.end() + 10].lstrip()
+
+        # Check if followed by bullet point or enumeration
+        if next_char.startswith('-') or (next_char and next_char[0].isdigit() and '.' in next_char[:3]):
+            # Keep one newline before list items
+            return f'$${block_content}$$\n'
+        else:
+            # Remove trailing newlines for non-list content
+            return f'$${block_content}$$'
+
+    # First handle blocks followed by list items
+    text = re.sub(pattern, process_block, text, flags=re.DOTALL)
+
+    # Then handle remaining blocks (not followed by lists)
+    pattern_remaining = r'\n+\$\$(.*?)\$\$\n+'
+    text = re.sub(pattern_remaining, r'$$\1$$', text, flags=re.DOTALL)
+
+    return text
 
 def get_preprocessors() -> list:
-    return [Processor(cloze_safe_math_jax), Processor(remove_trailing_new_lines), Processor(escape_code_comments),
-            Processor(standardize_bullet_indentation), Processor(format_bullet_points), Processor(replace_symbols),
-            Processor(markdown.markdown), BinaryProcessor(convert_to_mathjax), Processor(html_new_line_processor),
+    return [Processor(replace_symbols), Processor(remove_trailing_new_lines),
+            Processor(remove_new_lines_for_display_math_blocks), Processor(escape_code_comments),
+            Processor(standardize_bullet_indentation), Processor(format_bullet_points), Processor(markdown.markdown),
+            BinaryProcessor(convert_to_mathjax), Processor(cloze_safe_math_jax), Processor(html_new_line_processor),
             Processor(remove_trailing_new_lines), Processor(standardize_html), Processor(remove_trailing_br_tags),
             Processor(ignore_image_resizing_in_html)]
