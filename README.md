@@ -39,8 +39,8 @@ The answer: any markdown - **bold**, lists, `code`, $x^2$, $$display math$$, ![[
 
 ---
 Cloze
-Text with {{c1::deletions}} becomes a real cloze note.
-Without markers it is exported as a basic note tagged TODO_PROCESS_CLOZES (legacy).
+Exported as a basic note tagged TODO_PROCESS_CLOZES, deletions added by hand in Anki.
+With `cloze_notes = true` in the config, {{c1::deletions}} here become a real cloze note.
 
 ---
 Image Cloze
@@ -104,11 +104,22 @@ ignore = [".git", ".obsidian", "Archive", "templates"]
 "50.054_Compiler" = "Compiler Design and Program Analysis"
 ```
 
-## Card templates
+## Card templates and note types - nothing changes unless you opt in
 
-`markdown2anki/NoteTypes/{Basic,Cloze}/{front,back}.html` and `styling.css` are yours to customise and are
-git-ignored; the bundled `*.sample.*` files are used when they are missing. `__M2A_SUBJECT_SCRIPT__` in a
-template is replaced with the script that shows the `[display]` title.
+`markdown2anki/NoteTypes/{Basic,Cloze}/{front,back}.html` and `styling.css` are your personal templates,
+git-ignored and used **verbatim** - the exported note types keep the same ids, names, fields, templates
+and CSS as before. The bundled `*.sample.*` files are only used when a personal file is missing.
+
+Optional: put `__M2A_SUBJECT_SCRIPT__` into a template and it is replaced with a script that shows the
+`[display]` title for the card's tag. Without the placeholder nothing is injected.
+
+`cloze_notes = false` (default) keeps the legacy behaviour: a `Cloze` card is exported as a basic note
+tagged `TODO_PROCESS_CLOZES` for you to convert in Anki. Set it to `true` to export cards whose answer
+already contains `{{c1::...}}` as real cloze notes.
+
+`--target anki` adds notes to the note types named by `anki_basic_model` / `anki_cloze_model`. Point them
+at your existing note types to keep your styling; a name that does not exist yet is created from the
+templates. Existing note types are never modified.
 
 ## Development
 

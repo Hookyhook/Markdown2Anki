@@ -121,3 +121,14 @@ def test_init_migrates_env(tmp_path, monkeypatch, capsys):
     assert cfg.subjects == {"50.020 Network Security": "50.020_NetSec"}
     assert "Exercises" not in cfg.ignore
     assert cfg.display["50.020_NetSec"] == "50.020 Network Security"
+
+
+def test_cloze_notes_is_opt_in(vault):
+    from markdown2anki.build import MODEL_BASIC, MODEL_CLOZE, build
+    from markdown2anki.parser import parse_lines
+    from pathlib import Path
+    cards = parse_lines(["---", "Cloze", "A {{c1::grammar}} defines syntax"], Path("n.md"), "B")
+    legacy = build(cards, [])
+    assert legacy.notes[0].model == MODEL_BASIC and "TODO_PROCESS_CLOZES" in legacy.notes[0].tags
+    real = build(cards, [], cloze_notes=True)
+    assert real.notes[0].model == MODEL_CLOZE and "TODO_PROCESS_CLOZES" not in real.notes[0].tags

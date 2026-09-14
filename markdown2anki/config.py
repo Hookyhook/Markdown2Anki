@@ -34,6 +34,9 @@ class Config:
     ignore: List[str] = field(default_factory=lambda: list(DEFAULT_IGNORE))
     display: Dict[str, str] = field(default_factory=dict)  # tag -> title shown on the card
     anki_connect_url: str = "http://127.0.0.1:8765"
+    anki_basic_model: str = "M2A Basic"  # note type names used by --target anki
+    anki_cloze_model: str = "M2A Cloze"
+    cloze_notes: bool = False  # True: 'Cloze' cards with {{c1::}} markers become real cloze notes
     source: Optional[Path] = None  # where the config was loaded from
 
     def __post_init__(self) -> None:
@@ -101,6 +104,9 @@ def load_config(path: Optional[Path] = None) -> Config:
         ignore=list(data.get("ignore", DEFAULT_IGNORE)),
         display=dict(data.get("display", {})),
         anki_connect_url=data.get("anki_connect_url", "http://127.0.0.1:8765"),
+        anki_basic_model=data.get("anki_basic_model", "M2A Basic"),
+        anki_cloze_model=data.get("anki_cloze_model", "M2A Cloze"),
+        cloze_notes=bool(data.get("cloze_notes", False)),
         source=path,
     )
     return cfg
@@ -161,6 +167,13 @@ def render_toml(cfg: Config) -> str:
         f"# Where the .apkg and image-occlusion exports are written (relative to this file).",
         f"output_dir = {quote(str(cfg.output_dir))}",
         f"anki_connect_url = {quote(cfg.anki_connect_url)}",
+        "# Note type names used with `sync --target anki` (created on first use if missing).",
+        "# Set them to your existing note types to keep your own card styling.",
+        f"anki_basic_model = {quote(cfg.anki_basic_model)}",
+        f"anki_cloze_model = {quote(cfg.anki_cloze_model)}",
+        "# false: 'Cloze' cards are exported as basic notes tagged TODO_PROCESS_CLOZES (legacy behaviour).",
+        "# true: a 'Cloze' card whose answer contains {{c1::...}} becomes a real cloze note.",
+        f"cloze_notes = {'true' if cfg.cloze_notes else 'false'}",
         "",
         "# Top-level vault folders that are NOT courses.",
         "ignore = " + json.dumps(cfg.ignore, ensure_ascii=False),

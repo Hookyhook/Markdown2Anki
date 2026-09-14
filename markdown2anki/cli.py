@@ -123,7 +123,7 @@ def _print_diagnostics(diagnostics: List[Diagnostic], cfg: Config) -> int:
 
 def cmd_check(cfg: Config, args: argparse.Namespace) -> int:
     sources, cards, diagnostics = _collect(cfg, args.course)
-    result = build([c for c in cards if c.pending], diagnostics)
+    result = build([c for c in cards if c.pending], diagnostics, cfg.cloze_notes)
 
     print(f"vault: {cfg.vault}")
     print(f"notes: {len(sources)}   cards: {len(cards)}   pending: {sum(c.pending for c in cards)}   "
@@ -171,7 +171,7 @@ def cmd_status(cfg: Config, args: argparse.Namespace) -> int:
 def cmd_sync(cfg: Config, args: argparse.Namespace) -> int:
     sources, cards, diagnostics = _collect(cfg, args.course)
     selected = [c for c in cards if c.pending or (args.update and c.updatable)]
-    result = build(selected, diagnostics)
+    result = build(selected, diagnostics, cfg.cloze_notes)
 
     errors = [d for d in diagnostics if d.level == "error"]
     if diagnostics:

@@ -72,7 +72,8 @@ def _check_html(note: RenderedNote, diagnostics: List[Diagnostic]) -> None:
             return
 
 
-def build(cards: List[Card], diagnostics: List[Diagnostic]) -> BuildResult:
+def build(cards: List[Card], diagnostics: List[Diagnostic], cloze_notes: bool = False) -> BuildResult:
+    """``cloze_notes``: export 'Cloze' cards with {{c1::}} markers as real cloze notes (default: legacy basic note)."""
     result = BuildResult()
     for card in cards:
         image_dir = card.file.parent
@@ -102,7 +103,7 @@ def build(cards: List[Card], diagnostics: List[Diagnostic]) -> BuildResult:
                 result.skipped.append(card)
                 continue
             rendered = render_markdown(text)
-            if card.has_cloze_markers:
+            if cloze_notes and card.has_cloze_markers:
                 result.notes.append(RenderedNote(card, MODEL_CLOZE, [rendered, ""], tags, media))
             else:
                 # Legacy behaviour: export as a basic note and let the user add the deletions in Anki.
