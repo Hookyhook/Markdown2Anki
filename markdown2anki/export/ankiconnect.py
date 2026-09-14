@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Tuple
 from ..build import MODEL_CLOZE, BuildResult, RenderedNote
 from ..config import Config
 from ..ids import anki_note_id, is_anki_note_id
+from ..parser import Diagnostic
 from ..NoteTypes.note_types import BASIC_MODEL_ID, CLOZE_MODEL_ID, templates
 from ..parser import Card
 
@@ -87,8 +88,23 @@ def _note_payload(note: RenderedNote, deck: str, basic_model: str, cloze_model: 
             "options": {"allowDuplicate": True}}
 
 
-def export_ankiconnect(result: BuildResult, cfg: Config) -> Tuple[List[Tuple[Card, str]], int, int]:
-    """Add new notes and update notes that already carry an Anki note id. Returns (flags, added, updated)."""
+def export_ankiconnect(result: BuildResult, cfg: Config,
+                       diagnostics: List[Diagnostic] = None) -> Tuple[List[Tuple[Card, str]], int, int]:
+    """Add new notes and update notes that already carry an Anki note id. Returns (flags, added, updated).
+
+    Cards that were exported through an .apkg (hex id) cannot be updated here - Anki's note id is unknown -
+    so they are skipped with a warning instead of being added a second time.
+    """
+    diagnostics = diagnostics if diagnostics is not None else []
+    kept = []
+    for note in result.notes:
+        if note.card.added and not is_anki_note_id(note.card.card_id):
+            diagnostics.append(Diagnostic(note.card.file, note.card.line, "warning",
+                                          "exported via .apkg earlier; cannot be updated through AnkiConnect "
+                                          "(use `--target apkg --update`), skipped"))
+            continue
+        kept.append(note)
+    result.notes = kept
     client = AnkiConnect(cfg.anki_connect_url)
     basic_model, cloze_model = client.resolve_models(cfg, need_cloze=any(n.model == MODEL_CLOZE
                                                                           for n in result.notes))

@@ -95,8 +95,22 @@ def cmd_init(args: argparse.Namespace) -> int:
             if folder not in cfg.ignore:
                 cfg.display.setdefault(sanitize_tag(folder), folder)
 
+    if not cfg.vault.is_dir():
+        print(f"error: vault directory not found: {cfg.vault} (use --vault PATH)", file=sys.stderr)
+        return 2
+    courses = [p.name for p in cfg.vault.iterdir() if p.is_dir() and not p.name.startswith(".")
+               and p.name not in cfg.ignore]
+    if not courses:
+        print(f"error: no course folders in {cfg.vault} - expected <vault>/<course>/Anki - Lectures/*.md",
+              file=sys.stderr)
+        return 2
+
     target.write_text(render_toml(cfg), encoding="utf-8")
     print(f"wrote {target}")
+    print(f"vault: {cfg.vault}")
+    print(f"courses: {', '.join(sorted(courses))}")
+    print("next: `m2a check` to see what would be exported, `m2a status` for counts, `m2a sync --dry-run` "
+          "before the first real run")
     return 0
 
 
@@ -195,10 +209,11 @@ def cmd_sync(cfg: Config, args: argparse.Namespace) -> int:
         return 0
 
     target = args.target or cfg.target
+    n_before_export = len(diagnostics)
     if target == "anki":
         from .export.ankiconnect import AnkiConnectError, export_ankiconnect
         try:
-            flags, added, updated = export_ankiconnect(result, cfg)
+            flags, added, updated = export_ankiconnect(result, cfg, diagnostics)
         except AnkiConnectError as exc:
             print(f"error: {exc}", file=sys.stderr)
             print("hint: open Anki (with the AnkiConnect add-on) and retry, or use `m2a sync --target apkg`",
@@ -210,11 +225,14 @@ def cmd_sync(cfg: Config, args: argparse.Namespace) -> int:
     else:
         from .export.apkg import export_apkg
         output = args.output or (cfg.output_dir / f"{cfg.package_name}.apkg")
-        flags, occlusion_dir = export_apkg(result, cfg, output)
+        flags, occlusion_dir = export_apkg(result, cfg, output, diagnostics)
         print(f"wrote {output}  (deck '{cfg.deck}', {len(result.notes)} notes, "
               f"{sum(len(n.media) for n in result.notes)} media files)")
         if occlusion_dir:
             print(f"image occlusion sources copied to {occlusion_dir} (one folder per tag)")
+
+    for d in diagnostics[n_before_export:]:
+        print(f"  warning {d.file.name}:{d.line}: {d.message}")
 
     if args.no_flag:
         print("ADDED flags not written (--no-flag)")

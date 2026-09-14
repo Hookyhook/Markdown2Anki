@@ -3,13 +3,34 @@
 Turn flashcard notes written in Obsidian into Anki cards. One command exports everything that is new,
 marks it as added in the notes, and can update cards later when you fix them.
 
+## Getting started
+
 ```
-pip install -e .          # once; gives you the `m2a` command
-m2a init --vault ~/Documents/obsidian
-m2a check                 # parse everything, report problems, change nothing
-m2a status                # per course: total / added / pending
-m2a sync                  # export pending cards -> output/<package>.apkg, then flag them
+git clone <this repo> && cd Markdown2Anki
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .                                  # gives you the `m2a` command
+m2a init --vault ~/Documents/obsidian             # writes m2a.toml, lists the courses it found
+m2a check                                         # parses every note, reports problems, changes nothing
+m2a sync --dry-run                                # shows what the first export would contain
+m2a sync                                          # exports, then asks before flagging the notes
 ```
+
+Prefer `m2a` available from any terminal? `pipx install -e .` instead of the venv.
+
+Two ways to get cards into Anki:
+
+- **Package file** (`target = "apkg"`): `m2a sync` writes `output/<package_name>.apkg`; import it in Anki
+  with File → Import. Re-importing a package with changed cards updates them (Anki matches the GUID).
+- **AnkiConnect** (`target = "anki"`): install the
+  [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on (code `2055492159`), keep Anki
+  open, and `m2a sync` pushes the cards straight into the deck - no import step.
+
+Pick one and stay with it: a card carries the id of the target that created it (`ADDED[7f3a9c2e]:` from
+a package, `ADDED[n1694…]:` from AnkiConnect) and can only be *updated* through that same target. Trying
+the other one skips the card with a warning instead of creating a duplicate.
+
+**Trying it on a throw-away Anki profile first?** Run `m2a sync --no-flag`. Flags written against a test
+profile carry ids that mean nothing in your real one.
 
 ## How the vault is read
 
@@ -70,7 +91,7 @@ prose become `→` and `⇒`. `$5 and $10` is prose, `$x$` is math.
 m2a sync --dry-run            # list what would be exported
 m2a sync --course compiler    # only courses whose folder or tag matches (glob or substring)
 m2a sync --no-flag            # export without touching the notes
-m2a sync --update             # re-export flagged cards too -> updates them in Anki (same id, same GUID)
+m2a sync --update             # re-export flagged cards too -> updates them in Anki (same target only)
 m2a sync --target anki -y     # push via AnkiConnect without asking
 ```
 

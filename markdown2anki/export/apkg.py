@@ -11,7 +11,8 @@ import genanki
 
 from ..build import MODEL_CLOZE, BuildResult
 from ..config import Config
-from ..ids import new_card_id
+from ..ids import is_anki_note_id, new_card_id
+from ..parser import Diagnostic
 from ..NoteTypes.note_types import BasicNoteType, ClozeNoteType, get_basic_model, get_cloze_model
 from ..parser import Card
 
@@ -21,8 +22,23 @@ def stable_deck_id(name: str) -> int:
     return (1 << 30) + int(digest[:8], 16) % (1 << 30)
 
 
-def export_apkg(result: BuildResult, cfg: Config, output_path: Path) -> Tuple[List[Tuple[Card, str]], Path]:
-    """Write the package. Returns ((card, id) pairs to flag, occlusion directory or None)."""
+def export_apkg(result: BuildResult, cfg: Config, output_path: Path,
+                diagnostics: List[Diagnostic] = None) -> Tuple[List[Tuple[Card, str]], Path]:
+    """Write the package. Returns ((card, id) pairs to flag, occlusion directory or None).
+
+    Cards that were pushed through AnkiConnect (``n<id>``) have no GUID an .apkg import could match, so an
+    update is impossible here; they are skipped with a warning instead of being imported as duplicates.
+    """
+    diagnostics = diagnostics if diagnostics is not None else []
+    kept = []
+    for note in result.notes:
+        if note.card.added and is_anki_note_id(note.card.card_id):
+            diagnostics.append(Diagnostic(note.card.file, note.card.line, "warning",
+                                          "pushed via AnkiConnect earlier; cannot be updated through an .apkg "
+                                          "(use `--target anki --update`), skipped"))
+            continue
+        kept.append(note)
+    result.notes = kept
     basic_model = get_basic_model(cfg.display)
     cloze_model = get_cloze_model(cfg.display)
     deck = genanki.Deck(stable_deck_id(cfg.deck), cfg.deck)

@@ -110,8 +110,9 @@ def test_flag_guard_when_note_edited(vault, capsys, monkeypatch):
 
 def test_init_migrates_env(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
+    (tmp_path / "vault" / "50.020 Network Security" / "Anki - Lectures").mkdir(parents=True)
     (tmp_path / ".env").write_text(
-        'BASE_TAG=SUTD\nOBSIDIAN_VAULT_DIRECTORY=/tmp/vault\nPACKAGE_NAME=SUTD-Anki\n'
+        f'BASE_TAG=SUTD\nOBSIDIAN_VAULT_DIRECTORY={tmp_path / "vault"}\nPACKAGE_NAME=SUTD-Anki\n'
         'SUBJECT_TAG_DICTIONARY={"50.020 Network Security": "50.020_NetSec"}\n'
         'SUB_DIRECTORY_TAG_DICTIONARY={"Anki - Lectures": "Lectures", "Anki - Exercises": "Exercises"}\n'
         'IGNORE_DIRECTORIES=[".git", "Archive", "Exercises"]\n', encoding="utf-8")
@@ -145,3 +146,21 @@ def test_target_comes_from_config(vault, capsys, monkeypatch):
     assert run("-c", cfg_path, "sync", "--yes") == 2
     assert "cannot reach AnkiConnect" in capsys.readouterr().err
     assert run("-c", cfg_path, "sync", "--yes", "--target", "apkg") == 0
+
+
+def test_init_refuses_a_vault_without_courses(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "empty").mkdir()
+    assert run("init", "--vault", tmp_path / "empty") == 2
+    assert "no course folders" in capsys.readouterr().err
+    assert not (tmp_path / "m2a.toml").exists()
+
+
+def test_update_across_targets_is_refused(vault, capsys, monkeypatch):
+    v, cfg_path = vault
+    note = v / "50.054 Compiler" / "Anki - Lectures" / "W01 Intro.md"
+    note.write_text(note.read_text(encoding="utf-8").replace("What is a token?", "ADDED[n4242]: What is a token?"),
+                    encoding="utf-8")
+    assert run("-c", cfg_path, "sync", "--yes", "--update", "--no-flag") == 0
+    out = capsys.readouterr().out
+    assert "pushed via AnkiConnect earlier" in out and "2 new" in out
