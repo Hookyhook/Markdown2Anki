@@ -1,17 +1,19 @@
 import unittest
 import os
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 from markdown2anki import add_added_flags_to_each_valid_card
 
-with open("sample_1.md", "r", encoding="utf-8") as f:
+with open(os.path.join(HERE, "sample_1.md"), "r", encoding="utf-8") as f:
     SAMPLE_FILE_1 = f.read()
 
-with open("expected_1.md", "r", encoding="utf-8") as f:
+with open(os.path.join(HERE, "expected_1.md"), "r", encoding="utf-8") as f:
     EXPECTED_FILE_1 = f.read()
 
-with open("sample_2.md", "r", encoding="utf-8") as f:
+with open(os.path.join(HERE, "sample_2.md"), "r", encoding="utf-8") as f:
     SAMPLE_FILE_2 = f.read()
 
-with open("expected_2.md", "r", encoding="utf-8") as f:
+with open(os.path.join(HERE, "expected_2.md"), "r", encoding="utf-8") as f:
     EXPECTED_FILE_2 = f.read()
 
 SAMPLES = [SAMPLE_FILE_1, SAMPLE_FILE_2]
@@ -22,13 +24,13 @@ class TestFilePostProcessor(unittest.TestCase):
 
     def test_add_added_flags_to_each_valid_card(self):
         for sample, expected in zip(SAMPLES, EXPECTED_FILES):
-            modified_content = test_add_added_flags_to_each_valid_card(sample)
+            modified_content = _run_post_processor(sample)
             self.assertEqual(modified_content, expected)
 
 
-def test_add_added_flags_to_each_valid_card(sample):
+def _run_post_processor(sample):
     # Create a temporary file with the sample content
-    with open("test_file.md", "w", encoding="utf-8") as f:
+    with open(os.path.join(HERE, "test_file.md"), "w", encoding="utf-8") as f:
         f.write(sample)
 
     # Get the absolute path to the file including home directory

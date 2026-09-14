@@ -1,42 +1,38 @@
+import re
+
+HEADING_RE = re.compile(r"^(#+)\s*(.*)$")
+
+
 def handle_tags(new_heading: str, tags: list) -> list:
     """
-    Given a new heading and a list of tags, this function updates the list of tags based on the structure of the new
-    heading.
-    :param new_heading: line of the new heading
-    :param tags: existing tags
-    :return: updated list of tags
+    Given a heading line and the current tag stack, return the updated stack. The first two entries
+    (base tag, file name) are fixed; a heading of level N replaces everything from depth N on.
+    Only the leading ``#`` characters count, so ``# C# Basics`` is a level-1 heading named "C# Basics".
     """
-
-    # Remove the leading # with its whitespace and any other # characters
-    stripped_heading = new_heading.replace("# ", "").replace("#", "")
-
-    # Tag list consists of base tag and file name and is extended by each new heading
-    # If you subtract 1 from the length of tag it should match if the new heading if it is a subheading
-    if new_heading.count("#") == len(tags) - 1:
-        tags.append(stripped_heading)
-    elif new_heading.count("#") < len(tags) - 1:
-        while new_heading.count("#") < len(tags) - 1:
-            tags.pop()
-        tags.append(stripped_heading)
-    else:
-        print("Error: Wrong heading structure (Tag could not be created)")
-
+    match = HEADING_RE.match(new_heading)
+    if not match:
+        return tags
+    level = len(match.group(1))
+    text = match.group(2).strip()
+    fixed = min(2, len(tags))
+    keep = fixed + level - 1
+    tags = tags[:keep] if len(tags) > keep else list(tags)
+    tags.append(text)
     return tags
 
 
 def merge_tags(tags: list) -> str:
     """
-    Merge tags into a single string and apply tag formatting (replace spaces with underscores, have leading zeros
-    (09 instead of 9) add "::" between tags).
-    :param tags: list of tags
-    :return: merged tags
+    Merge tags into a single hierarchical tag: spaces become underscores, a leading single digit is
+    zero-padded (9 -> 09) so tags sort naturally, parts are joined with "::".
     """
-
-    merged_tag = ""
+    parts = []
     for tag in tags:
-        if tag != "":
-            if tag[0].isdigit() and tag[0] != "0" and not tag[1].isdigit():
-                tag = "0" + tag
-
-            merged_tag += tag.replace(". ", "_").replace(" ", "_") + "::"
-    return merged_tag[:-2] if tags else ""
+        if not tag:
+            continue
+        if len(tag) >= 2 and tag[0].isdigit() and tag[0] != "0" and not tag[1].isdigit():
+            tag = "0" + tag
+        elif len(tag) == 1 and tag.isdigit() and tag != "0":
+            tag = "0" + tag
+        parts.append(tag.replace(". ", "_").replace(" ", "_"))
+    return "::".join(parts)

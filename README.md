@@ -1,130 +1,121 @@
-# Markdown2Anki - Converter
+# Markdown2Anki
 
-This project is a Python-based tool for converting markdown files into Anki-compatible packages. It processes markdown
-files, extracts card data, and generates an Anki package that can be imported into the Anki flashcard application.
+Turn flashcard notes written in Obsidian into Anki cards. One command exports everything that is new,
+marks it as added in the notes, and can update cards later when you fix them.
 
-## Features
+```
+pip install -e .          # once; gives you the `m2a` command
+m2a init --vault ~/Documents/obsidian
+m2a check                 # parse everything, report problems, change nothing
+m2a status                # per course: total / added / pending
+m2a sync                  # export pending cards -> output/<package>.apkg, then flag them
+```
 
-- Processes markdown files into different note types (basic cards, clozes and image occlusion cards)
-- Supports image processing for cards.
-- Plugin-Based - Easily extendable to support additional note types or features.
+## How the vault is read
 
-## Requirements
+```
+<vault>/
+├── 50.054 Compiler Design and Program Analysis/     course  -> subject tag
+│   ├── Anki - Lectures/                             folder  -> category tag
+│   │   ├── W01 Introduction.md                      note    -> tag, one card per block
+│   │   └── Pasted image 2026....png                 images live next to the note
+│   └── Anki - Exercises/
+├── Archive/                                         ignored
+└── templates/                                       ignored
+```
 
-- Python 3.8 or higher
-- The following Python libraries:
-  - `markdown`
-  - `genanki`
-  - `python-dotenv`
+Exactly two levels: `<course>/<subdirectory>/*.md`. Every top-level folder that is not in `ignore` is a
+course (or list them explicitly in `[subjects]`); every subfolder must be in `[subdirectories]`, anything
+else is reported by `m2a check`. Cards are tagged `base_tag::subject::category::note::heading::subheading`.
 
-## Usage - Basic Adding from Input
-
-1. Place your markdown files in a directory called `input`. If you reference any images place them in the same directory
-
-2. Run the script:
-
-   ```bash
-   python basic_adding_from_input.py
-   ```
-
-3. The processed Anki package will be saved in the `output` directory.
-
-## Expected Input Format
-
-The markdown files should follow a specific format for the tool to process them correctly. Here are the expected formats for different note types:
-
-In general the file should have the following format:
+## Note format
 
 ```markdown
-# Headings (that will be used for tags)
-
-## Subheadings
-
-### Subsubheadings
+# Heading                        -> extra tag; ## nests below it
+---
+A question on the first line
+EQL: an extra question line
+The answer: any markdown - **bold**, lists, `code`, $x^2$, $$display math$$, ![[image.png]]
 
 ---
-
-A question in the first line
-And the answer in the second line
-
----
-
-Another question.
-EQL: For an extra question line users can use the EQL (Extra-Question-Line) Prefix followed by a colon
-And here the answer
-with as much new lines as the user wanst
-![[image.png]]
-Images can be used as well
-We also support enumerations and bullet poinst:
-
-- first
-  - sub point
-- second
-
-1. first
-2. second
-
-# Headings between questions are fine too
-
----
-
-Cloze Image
-![[image.png]]
-
----
-
 Cloze
-Here is text that will be added to a cloze card. All cloze cards will get an extra tag, so that the
-user can add the clozes in the Anki-Interface.
+Text with {{c1::deletions}} becomes a real cloze note.
+Without markers it is exported as a basic note tagged TODO_PROCESS_CLOZES (legacy).
+
+---
+Image Cloze
+![[diagram.png]]                 -> image copied to output/occlusions/<tag>/ for manual occlusion
+
+---
+Question about code?
+```c
+#CODE#                           -> tagged TODO_PROCESS_CODE; the marker line is removed
+int x = 1;
+```
 ```
 
-### Formatting Guidelines
+Rules: a line of `---` starts a card; the next non-empty line is the question; everything up to the next
+separator or heading is the answer. Blank slots (`---` followed by blank lines) are ignored. Fenced code,
+inline code and math are never touched by symbol replacement or the markdown parser; `->` and `=>` in
+prose become `→` and `⇒`. `$5 and $10` is prose, `$x$` is math.
 
-- Each **question and answer** pair must be separated by a line with three dashes (`---`).
-- **Questions and answers** can span multiple lines:
-  - If a question needs multiple lines, prefix additional lines with `EQL:` (Extra-Question-Line).
-  - Answers do **not** require any prefixes.
-- **Markdown syntax** (e.g., images, bullet points, enumerations) is fully supported and will automatically be converted to HTML.
+## What `sync` does
 
-### Special Card Types
-
-- **Cloze Cards**:
-
-  - To create a Cloze card, the question line must contain only the word `Cloze`.
-  - The corresponding answer should include the text for the cloze deletion.
-  - Note: Clozes are not generated automatically — the user must manually insert the cloze formatting later. A special identifier tag will be added to help locate these cards.
-
-- **Image Occlusions**:
-  - Referenced images will be saved to the output folder for further processing.
-  - An additional output file will be created containing the corresponding tags.
-
-### Additional Features
-
-- **Headings as Tags**:
-
-  - Headings between questions are allowed and will be used as tags.
-  - The first heading will be treated as the **main tag**, the second as a **subtag**, and so forth.
-
-- **Code Blocks**:
-  - To mark code blocks for extra tagging, include the identifier `#CODE#` inside the code block.
-  - This will ensure a special tag is added for easier later processing.
-
-## Output
-
-The output will be an Anki package file (`.apkg`) located in the `output` directory. The package will contain all the processed cards.
-
-- All Clozes will have an extra tag: "TODO_PROCESS_CLOZES"
-- All Cards containing the `#CODE#` tag, will have an extra tag: "TODO_PROCESS_CODE"
-- The output folder will contain all images that can be used for image occlusions
-
-## Project Structure
+1. Parse all notes, build the pending cards (and, with `--update`, the already-added ones that have an id).
+2. Export them - `.apkg` by default, or straight into a running Anki with `--target anki` (needs the
+   [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on).
+3. Ask, then write `ADDED[<id>]: ` in front of each exported question, so the next run skips it.
 
 ```
-.
-├── input/                      # Directory for input markdown files
-├── output/                     # Directory for generated Anki packages (automatically generated)
-├── markdown2anki/              # Library code
-├── basic_adding_from_input.py  # Example script for processing files
-├── requirements.txt            # Python dependencies
-└── README.md                   # Project documentation
+m2a sync --dry-run            # list what would be exported
+m2a sync --course compiler    # only courses whose folder or tag matches (glob or substring)
+m2a sync --no-flag            # export without touching the notes
+m2a sync --update             # re-export flagged cards too -> updates them in Anki (same id, same GUID)
+m2a sync --target anki -y     # push via AnkiConnect without asking
 ```
+
+Flags are written only after the export succeeded, and only if the question line is still what was
+parsed. Cards flagged by an older version (`ADDED: ` without id) are skipped and cannot be updated.
+
+The deck id is derived from the deck name and note GUIDs from the card id, so re-importing an `.apkg`
+updates notes instead of duplicating them.
+
+## Configuration - `m2a.toml`
+
+Created by `m2a init` (migrates a legacy `.env` if one exists) and searched for upwards from the current
+directory; `-c path` overrides.
+
+```toml
+vault = "~/Documents/obsidian"
+package_name = "SUTD-Anki"
+deck = "SUTD-Anki"            # use :: for subdecks
+base_tag = "SUTD"
+output_dir = "output"
+ignore = [".git", ".obsidian", "Archive", "templates"]
+
+[subjects]                    # folder -> tag; empty table = every folder, tag = folder name
+"50.054 Compiler Design and Program Analysis" = "50.054_Compiler"
+
+[subdirectories]              # folder inside a course -> tag
+"Anki - Lectures" = "Lectures"
+"Anki - Exercises" = "Exercises"
+
+[display]                     # tag -> title shown in the corner of the card; first match wins
+"50.054_Compiler" = "Compiler Design and Program Analysis"
+```
+
+## Card templates
+
+`markdown2anki/NoteTypes/{Basic,Cloze}/{front,back}.html` and `styling.css` are yours to customise and are
+git-ignored; the bundled `*.sample.*` files are used when they are missing. `__M2A_SUBJECT_SCRIPT__` in a
+template is replaced with the script that shows the `[display]` title.
+
+## Development
+
+```
+pip install -e .[dev]
+pytest
+```
+
+`basic_adding_from_input.py` and `add_files_from_university_vault.py` are the pre-CLI scripts and still run
+on the shared library code.
