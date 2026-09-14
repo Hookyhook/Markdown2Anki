@@ -33,8 +33,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     p_sync = sub.add_parser("sync", help="export pending cards and mark them as added")
     p_sync.add_argument("--course", help="only this course (folder name or tag; glob or substring)")
-    p_sync.add_argument("--target", choices=["apkg", "anki"], default="apkg",
-                        help="apkg: write a package file (default); anki: push via AnkiConnect")
+    p_sync.add_argument("--target", choices=["apkg", "anki"], default=None,
+                        help="apkg: write a package file; anki: push via AnkiConnect (default: 'target' in m2a.toml)")
     p_sync.add_argument("--update", action="store_true",
                         help="also re-export cards that were already added with an id (updates them in Anki)")
     p_sync.add_argument("-n", "--dry-run", action="store_true", help="show what would be exported, write nothing")
@@ -194,12 +194,15 @@ def cmd_sync(cfg: Config, args: argparse.Namespace) -> int:
         print("dry run - nothing written")
         return 0
 
-    if args.target == "anki":
+    target = args.target or cfg.target
+    if target == "anki":
         from .export.ankiconnect import AnkiConnectError, export_ankiconnect
         try:
             flags, added, updated = export_ankiconnect(result, cfg)
         except AnkiConnectError as exc:
             print(f"error: {exc}", file=sys.stderr)
+            print("hint: open Anki (with the AnkiConnect add-on) and retry, or use `m2a sync --target apkg`",
+                  file=sys.stderr)
             return 2
         print(f"AnkiConnect: {added} added, {updated} updated in deck '{cfg.deck}'")
         if result.occlusions:

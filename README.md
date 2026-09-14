@@ -62,8 +62,8 @@ prose become `→` and `⇒`. `$5 and $10` is prose, `$x$` is math.
 ## What `sync` does
 
 1. Parse all notes, build the pending cards (and, with `--update`, the already-added ones that have an id).
-2. Export them - `.apkg` by default, or straight into a running Anki with `--target anki` (needs the
-   [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on).
+2. Export them - `.apkg`, or straight into a running Anki via `--target anki` (needs the
+   [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on). `target` in the config sets the default.
 3. Ask, then write `ADDED[<id>]: ` in front of each exported question, so the next run skips it.
 
 ```
@@ -91,6 +91,8 @@ package_name = "SUTD-Anki"
 deck = "SUTD-Anki"            # use :: for subdecks
 base_tag = "SUTD"
 output_dir = "output"
+target = "anki"               # default for `m2a sync`: "apkg" or "anki"
+cloze_notes = true            # {{c1::}} markers in a Cloze card -> real cloze note
 ignore = [".git", ".obsidian", "Archive", "templates"]
 
 [subjects]                    # folder -> tag; empty table = every folder, tag = folder name
@@ -117,9 +119,10 @@ Optional: put `__M2A_SUBJECT_SCRIPT__` into a template and it is replaced with a
 tagged `TODO_PROCESS_CLOZES` for you to convert in Anki. Set it to `true` to export cards whose answer
 already contains `{{c1::...}}` as real cloze notes.
 
-`--target anki` adds notes to the note types named by `anki_basic_model` / `anki_cloze_model`. Point them
-at your existing note types to keep your styling; a name that does not exist yet is created from the
-templates. Existing note types are never modified.
+`--target anki` first looks for the note types that earlier `.apkg` imports created (by their ids, so a
+stock note type with the same name is never picked by mistake); otherwise it uses the names in
+`anki_basic_model` / `anki_cloze_model`, creating them from the templates if missing. Existing note types
+are never modified.
 
 ## Development
 

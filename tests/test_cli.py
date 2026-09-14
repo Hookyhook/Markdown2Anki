@@ -132,3 +132,16 @@ def test_cloze_notes_is_opt_in(vault):
     assert legacy.notes[0].model == MODEL_BASIC and "TODO_PROCESS_CLOZES" in legacy.notes[0].tags
     real = build(cards, [], cloze_notes=True)
     assert real.notes[0].model == MODEL_CLOZE and "TODO_PROCESS_CLOZES" not in real.notes[0].tags
+
+
+def test_target_comes_from_config(vault, capsys, monkeypatch):
+    v, cfg_path = vault
+    cfg_path.write_text(cfg_path.read_text(encoding="utf-8").replace('target = "apkg"', 'target = "anki"'), encoding="utf-8")
+    from markdown2anki.export import ankiconnect
+
+    def boom(self, action, **params):
+        raise ankiconnect.AnkiConnectError("cannot reach AnkiConnect")
+    monkeypatch.setattr(ankiconnect.AnkiConnect, "invoke", boom)
+    assert run("-c", cfg_path, "sync", "--yes") == 2
+    assert "cannot reach AnkiConnect" in capsys.readouterr().err
+    assert run("-c", cfg_path, "sync", "--yes", "--target", "apkg") == 0

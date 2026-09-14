@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Tuple
 from ..build import MODEL_CLOZE, BuildResult, RenderedNote
 from ..config import Config
 from ..ids import anki_note_id, is_anki_note_id
-from ..NoteTypes.note_types import templates
+from ..NoteTypes.note_types import BASIC_MODEL_ID, CLOZE_MODEL_ID, templates
 from ..parser import Card
 
 
@@ -40,18 +40,28 @@ class AnkiConnect:
             raise AnkiConnectError(f"{action}: {body['error']}")
         return body.get("result")
 
-    def ensure_models(self, cfg: Config, need_cloze: bool) -> None:
-        """Create the configured note types only if they do not exist; existing ones are never modified."""
-        existing = set(self.invoke("modelNames"))
-        if cfg.anki_basic_model not in existing:
+    def resolve_models(self, cfg: Config, need_cloze: bool) -> Tuple[str, str]:
+        """Return (basic, cloze) note type names to use.
+
+        The note types that earlier .apkg imports created are found by their ids, so the same styling
+        keeps being used even if a stock note type shares the name. Otherwise the configured names are
+        used and created if missing. Existing note types are never modified.
+        """
+        names_and_ids: Dict[str, int] = self.invoke("modelNamesAndIds")
+        by_id = {int(model_id): name for name, model_id in names_and_ids.items()}
+
+        basic = by_id.get(BASIC_MODEL_ID, cfg.anki_basic_model)
+        if basic not in names_and_ids:
             t = templates("Basic", cfg.display)
-            self.invoke("createModel", modelName=cfg.anki_basic_model, inOrderFields=["Front", "Back"],
-                        css=t["css"], cardTemplates=[{"Name": "Card 1", "Front": t["qfmt"], "Back": t["afmt"]}])
-        if need_cloze and cfg.anki_cloze_model not in existing:
+            self.invoke("createModel", modelName=basic, inOrderFields=["Front", "Back"], css=t["css"],
+                        cardTemplates=[{"Name": "Card 1", "Front": t["qfmt"], "Back": t["afmt"]}])
+
+        cloze = by_id.get(CLOZE_MODEL_ID, cfg.anki_cloze_model)
+        if need_cloze and cloze not in names_and_ids:
             t = templates("Cloze", cfg.display)
-            self.invoke("createModel", modelName=cfg.anki_cloze_model, inOrderFields=["Text", "Back Extra"],
-                        css=t["css"], isCloze=True,
-                        cardTemplates=[{"Name": "Cloze", "Front": t["qfmt"], "Back": t["afmt"]}])
+            self.invoke("createModel", modelName=cloze, inOrderFields=["Text", "Back Extra"], css=t["css"],
+                        isCloze=True, cardTemplates=[{"Name": "Cloze", "Front": t["qfmt"], "Back": t["afmt"]}])
+        return basic, cloze
 
     def ensure_deck(self, name: str) -> None:
         self.invoke("createDeck", deck=name)
@@ -67,13 +77,12 @@ class AnkiConnect:
                 self.invoke("storeMediaFile", filename=path.name, data=data)
 
 
-def _note_payload(note: RenderedNote, cfg: Config) -> Dict[str, Any]:
-    deck = cfg.deck
+def _note_payload(note: RenderedNote, deck: str, basic_model: str, cloze_model: str) -> Dict[str, Any]:
     if note.model == MODEL_CLOZE:
-        return {"deckName": deck, "modelName": cfg.anki_cloze_model,
+        return {"deckName": deck, "modelName": cloze_model,
                 "fields": {"Text": note.fields[0], "Back Extra": note.fields[1]}, "tags": note.tags,
                 "options": {"allowDuplicate": True}}
-    return {"deckName": deck, "modelName": cfg.anki_basic_model,
+    return {"deckName": deck, "modelName": basic_model,
             "fields": {"Front": note.fields[0], "Back": note.fields[1]}, "tags": note.tags,
             "options": {"allowDuplicate": True}}
 
@@ -81,7 +90,8 @@ def _note_payload(note: RenderedNote, cfg: Config) -> Dict[str, Any]:
 def export_ankiconnect(result: BuildResult, cfg: Config) -> Tuple[List[Tuple[Card, str]], int, int]:
     """Add new notes and update notes that already carry an Anki note id. Returns (flags, added, updated)."""
     client = AnkiConnect(cfg.anki_connect_url)
-    client.ensure_models(cfg, need_cloze=any(n.model == MODEL_CLOZE for n in result.notes))
+    basic_model, cloze_model = client.resolve_models(cfg, need_cloze=any(n.model == MODEL_CLOZE
+                                                                          for n in result.notes))
     client.ensure_deck(cfg.deck)
     client.store_media(result.notes)
 
@@ -97,14 +107,15 @@ def export_ankiconnect(result: BuildResult, cfg: Config) -> Tuple[List[Tuple[Car
     updated = 0
     for note in to_update:
         note_id = anki_note_id(note.card.card_id)  # type: ignore[arg-type]
-        payload = _note_payload(note, cfg)
+        payload = _note_payload(note, cfg.deck, basic_model, cloze_model)
         client.invoke("updateNoteFields", note={"id": note_id, "fields": payload["fields"]})
         client.invoke("addTags", notes=[note_id], tags=" ".join(note.tags))
         updated += 1
 
     added = 0
     if to_add:
-        ids = client.invoke("addNotes", notes=[_note_payload(n, cfg) for n in to_add])
+        ids = client.invoke("addNotes", notes=[_note_payload(n, cfg.deck, basic_model, cloze_model)
+                                               for n in to_add])
         for note, note_id in zip(to_add, ids):
             if note_id is None:
                 continue
