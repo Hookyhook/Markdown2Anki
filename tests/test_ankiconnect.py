@@ -80,3 +80,28 @@ def test_update_finds_note_by_embedded_marker(monkeypatch):
     assert updated == 1 and added == 0 and flags == []
     assert next(p for a, p in fake.calls if a == "updateNoteFields")["note"]["id"] == 777
     assert len(diags) == 1 and "not found in Anki" in diags[0].message and diags[0].line == 9
+
+
+def test_template_diff_and_push(monkeypatch):
+    from markdown2anki.NoteTypes.note_types import templates
+    fake = FakeAnki({"Basic": ankiconnect.BASIC_MODEL_ID})
+    base = fake.invoke
+    local = templates("Basic", {"50.054_Compiler": "Compiler"})
+
+    def invoke(action, **params):
+        if action == "modelTemplates":
+            fake.calls.append((action, params))
+            return {"Card 1": {"Front": "OLD FRONT", "Back": local["afmt"]}}
+        if action == "modelStyling":
+            fake.calls.append((action, params))
+            return {"css": local["css"]}
+        return base(action, **params)
+    fake.invoke = invoke
+    monkeypatch.setattr(ankiconnect.AnkiConnect, "invoke", lambda self, action, **p: fake.invoke(action, **p))
+    cfg = Config(vault=Path("."), display={"50.054_Compiler": "Compiler"})
+    entries = ankiconnect.template_diff(cfg)
+    assert [e["name"] for e in entries] == ["Basic"] and entries[0]["changed"] == ["front"]
+    ankiconnect.push_templates(entries[0])
+    upd = next(p for a, p in fake.calls if a == "updateModelTemplates")
+    assert upd["model"]["name"] == "Basic" and "Compiler" in upd["model"]["templates"]["Card 1"]["Front"]
+    assert any(a == "updateModelStyling" for a, _ in fake.calls)

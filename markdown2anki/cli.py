@@ -41,6 +41,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_status = sub.add_parser("status", help="per course: cards total / added / pending")
     p_status.add_argument("--course", help="only this course")
 
+    p_tpl = sub.add_parser("templates", help="compare the local card templates with the note types in Anki "
+                                             "and push them (AnkiConnect)")
+    p_tpl.add_argument("-y", "--yes", action="store_true", help="push without asking")
+    p_tpl.add_argument("--diff", action="store_true", help="only show what differs, never push")
+
     p_unflag = sub.add_parser("unflag", help="remove ADDED flags so cards are exported again as new cards")
     p_unflag.add_argument("--course", help="only this course (folder name or tag; glob or substring)")
     p_unflag.add_argument("--file", type=Path, help="only this note")
@@ -80,6 +85,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return cmd_sync(cfg, args)
         if args.command == "unflag":
             return cmd_unflag(cfg, args)
+        if args.command == "templates":
+            return cmd_templates(cfg, args)
     except (FileNotFoundError, ValueError) as exc:
         _error(str(exc))
         return 2
@@ -280,6 +287,35 @@ def cmd_status(cfg: Config, args: argparse.Namespace) -> int:
     problems = [d for d in diagnostics if d.level != "info"]
     if problems:
         print(f"  {_summary_line(problems)}  {ui.dim('- run `m2a check`')}")
+    return 0
+
+
+def cmd_templates(cfg: Config, args: argparse.Namespace) -> int:
+    from .export.ankiconnect import AnkiConnectError, push_templates, template_diff
+    print(ui.header("m2a templates") + ui.dim(f"  {cfg.anki_connect_url}"))
+    try:
+        entries = template_diff(cfg)
+    except AnkiConnectError as exc:
+        _error(str(exc), "open Anki with the AnkiConnect add-on and retry")
+        return 2
+    if not entries:
+        print(f"  {ui.dim('no matching note types in Anki yet - they are created on the first sync')}")
+        return 0
+    stale = [e for e in entries if e["changed"]]
+    for e in entries:
+        state = ui.yellow("differs: " + ", ".join(e["changed"])) if e["changed"] else ui.green("up to date")
+        print(f"  {ui.bold(e['name']):40} {ui.dim(e['kind'])}  {state}")
+    if not stale or args.diff:
+        return 0
+    print()
+    print(f"  {ui.yellow('note:')} this replaces the card template and styling of the note type(s) above in "
+          f"Anki with your local files under NoteTypes/. Cards and review history are untouched.")
+    if not args.yes and not _confirm(f"push templates for {len(stale)} note type(s)?"):
+        print(f"  {ui.dim('nothing changed')}")
+        return 0
+    for e in stale:
+        push_templates(e)
+        print(f"  {ui.green('✓')} {e['name']}: pushed {', '.join(e['changed'])}")
     return 0
 
 

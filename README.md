@@ -151,6 +151,11 @@ Optional: put `__M2A_SUBJECT_SCRIPT__` into a template and it is replaced with a
 tagged `TODO_PROCESS_CLOZES` for you to convert in Anki. Set it to `true` to export cards whose answer
 already contains `{{c1::...}}` as real cloze notes.
 
+AnkiConnect never modifies an existing note type on `sync`. To bring your local templates (for example
+the `__M2A_SUBJECT_SCRIPT__` subject label) into Anki, run `m2a templates`: it shows what differs and asks
+before replacing the note type's card template and styling; cards and review history are untouched.
+`m2a templates --diff` only compares.
+
 `--target anki` first looks for the note types that earlier `.apkg` imports created (by their ids, so a
 stock note type with the same name is never picked by mistake); otherwise it uses the names in
 `anki_basic_model` / `anki_cloze_model`, creating them from the templates if missing. Existing note types

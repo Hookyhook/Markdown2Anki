@@ -78,6 +78,45 @@ class AnkiConnect:
                 self.invoke("storeMediaFile", filename=path.name, data=data)
 
 
+def template_diff(cfg: Config) -> List[Dict[str, Any]]:
+    """Compare the local templates with the note types in Anki. Returns one entry per note type that exists:
+    {name, kind, changed: [what differs], local: {...}, remote: {...}}."""
+    client = AnkiConnect(cfg.anki_connect_url)
+    names_and_ids: Dict[str, int] = client.invoke("modelNamesAndIds")
+    by_id = {int(v): k for k, v in names_and_ids.items()}
+    out = []
+    for kind, model_id, configured, card_name in (("Basic", BASIC_MODEL_ID, cfg.anki_basic_model, "Card 1"),
+                                                  ("Cloze", CLOZE_MODEL_ID, cfg.anki_cloze_model, "Cloze")):
+        name = by_id.get(model_id, configured)
+        if name not in names_and_ids:
+            continue
+        local = templates(kind, cfg.display)
+        remote_templates = client.invoke("modelTemplates", modelName=name)
+        remote_css = client.invoke("modelStyling", modelName=name)["css"]
+        remote_card = next(iter(remote_templates.values()))
+        remote_card_name = next(iter(remote_templates.keys()))
+        changed = []
+        if remote_card.get("Front", "").strip() != local["qfmt"].strip():
+            changed.append("front")
+        if remote_card.get("Back", "").strip() != local["afmt"].strip():
+            changed.append("back")
+        if remote_css.strip() != local["css"].strip():
+            changed.append("styling")
+        out.append({"name": name, "kind": kind, "card": remote_card_name or card_name, "changed": changed,
+                    "local": local, "client": client})
+    return out
+
+
+def push_templates(entry: Dict[str, Any]) -> None:
+    """Overwrite one note type's card template and styling in Anki with the local version."""
+    client: AnkiConnect = entry["client"]
+    local = entry["local"]
+    client.invoke("updateModelTemplates",
+                  model={"name": entry["name"], "templates": {entry["card"]: {"Front": local["qfmt"],
+                                                                              "Back": local["afmt"]}}})
+    client.invoke("updateModelStyling", model={"name": entry["name"], "css": local["css"]})
+
+
 def _fields(note: RenderedNote, card_id: str) -> Dict[str, str]:
     back = with_marker(note.fields[1], card_id)
     if note.model == MODEL_CLOZE:
