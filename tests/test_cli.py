@@ -117,7 +117,7 @@ def test_init_migrates_env(tmp_path, monkeypatch, capsys):
         'SUBJECT_TAG_DICTIONARY={"50.020 Network Security": "50.020_NetSec"}\n'
         'SUB_DIRECTORY_TAG_DICTIONARY={"Anki - Lectures": "Lectures", "Anki - Exercises": "Exercises"}\n'
         'IGNORE_DIRECTORIES=[".git", "Archive", "Exercises"]\n', encoding="utf-8")
-    assert run("init", "--here") == 0
+    assert run("init", "--here", "--yes") == 0
     cfg = load_config(tmp_path / "m2a.toml")
     assert cfg.package_name == "SUTD-Anki"
     assert cfg.subjects == {"50.020 Network Security": "50.020_NetSec"}
@@ -152,7 +152,7 @@ def test_target_comes_from_config(vault, capsys, monkeypatch):
 def test_init_refuses_a_vault_without_courses(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "empty").mkdir()
-    assert run("init", "--vault", tmp_path / "empty") == 2
+    assert run("--vault", tmp_path / "empty", "init", "--yes") == 2
     assert "no course folders" in capsys.readouterr().err
     assert not (tmp_path / "m2a.toml").exists()
 
@@ -171,7 +171,7 @@ def test_init_writes_user_config_by_default_and_refuses_twice(tmp_path, monkeypa
     import os
     monkeypatch.chdir(tmp_path)
     (tmp_path / "vault" / "50.020 Network Security" / "Anki - Lectures").mkdir(parents=True)
-    assert run("init", "--vault", tmp_path / "vault") == 0
+    assert run("--vault", tmp_path / "vault", "init", "--yes") == 0
     written = Path(os.environ["XDG_CONFIG_HOME"]) / "m2a" / "m2a.toml"
     assert written.is_file()
     assert "next:" in capsys.readouterr().out
@@ -179,16 +179,19 @@ def test_init_writes_user_config_by_default_and_refuses_twice(tmp_path, monkeypa
     monkeypatch.chdir(tmp_path / "vault")
     assert run("status") == 0
     # a second init refuses...
-    assert run("init", "--vault", tmp_path / "vault") == 1
+    assert run("--vault", tmp_path / "vault", "init", "--yes") == 1
     assert "already exists" in capsys.readouterr().err
-    # ...unless forced, which keeps a backup
-    assert run("init", "--vault", tmp_path / "vault", "--force") == 0
+    # ...but a project config next to it is fine
+    assert run("--vault", tmp_path / "vault", "init", "--yes", "--here") == 0
+    assert (tmp_path / "vault" / "m2a.toml").is_file()
+    # ...and --force replaces the user config, keeping a backup
+    assert run("--vault", tmp_path / "vault", "init", "--yes", "--force") == 0
     assert written.with_suffix(".toml.bak").is_file()
 
 
 def test_init_needs_a_vault(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    assert run("init") == 2
+    assert run("init", "--yes") == 2
     assert "--vault" in capsys.readouterr().err
 
 
@@ -224,3 +227,50 @@ def test_tilde_in_output_dir(tmp_path, monkeypatch):
     (tmp_path / "m2a.toml").write_text('vault = "v"\noutput_dir = "~/Downloads/M2A"\n', encoding="utf-8")
     cfg = load_config(tmp_path / "m2a.toml")
     assert cfg.output_dir == tmp_path / "Downloads" / "M2A"
+
+
+def test_init_non_interactive_picks_every_course_and_short_tags(tmp_path, capsys):
+    v = tmp_path / "vault"
+    (v / "50.054 Compiler Design and Program Analysis" / "Anki - Lectures").mkdir(parents=True)
+    (v / "50.054 Compiler Design and Program Analysis" / "Anki - Lectures" / "a.md").write_text("---\nq\na\n")
+    (v / "Maths" / "Anki - Exercises").mkdir(parents=True)
+    (v / "Archive").mkdir()
+    cfg_path = tmp_path / "m2a.toml"
+    assert run("-c", cfg_path, "--vault", v, "init", "--yes", "--deck", "Uni::SUTD", "--target", "apkg") == 0
+    cfg = load_config(cfg_path)
+    assert cfg.subjects == {"50.054 Compiler Design and Program Analysis": "50.054_Compiler", "Maths": "Maths"}
+    assert cfg.subdirectories == {"Anki - Exercises": "Exercises", "Anki - Lectures": "Lectures"}
+    assert cfg.display["50.054_Compiler"] == "50.054 Compiler Design and Program Analysis"
+    assert cfg.deck == "Uni::SUTD" and cfg.package_name == "Uni-SUTD" and cfg.target == "apkg"
+
+
+def test_init_wizard_answers(tmp_path, answers):
+    v = tmp_path / "vault"
+    (v / "A course" / "Anki - Lectures").mkdir(parents=True)
+    (v / "B course" / "Cards").mkdir(parents=True)
+    (v / "B course" / "Cards" / "x.md").write_text("---\nq\na\n")
+    queue = answers(str(v), ["B course"], "B", ["Cards"], "C", "Deck", "", "apkg", True, str(tmp_path / "out"))
+    cfg_path = tmp_path / "m2a.toml"
+    assert run("-c", cfg_path, "init") == 0
+    assert not queue
+    cfg = load_config(cfg_path)
+    assert cfg.vault == v.resolve() and cfg.subjects == {"B course": "B"}
+    assert cfg.subdirectories == {"Cards": "C"}
+    assert cfg.deck == "Deck" and cfg.base_tag == "" and cfg.target == "apkg" and cfg.cloze_notes
+    assert cfg.output_dir == tmp_path / "out"
+
+
+def test_no_arguments_prints_help(capsys):
+    assert run() == 0
+    assert "Usage: m2a" in capsys.readouterr().out
+
+
+def test_unknown_setting_is_rejected(tmp_path):
+    (tmp_path / "m2a.toml").write_text('vault = "."\npackage = "x"\n', encoding="utf-8")
+    with pytest.raises(ValueError, match="unknown setting"):
+        load_config(tmp_path / "m2a.toml")
+
+
+def test_version(capsys):
+    assert run("--version") == 0
+    assert capsys.readouterr().out.startswith("m2a ")

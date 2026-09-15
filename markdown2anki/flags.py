@@ -25,7 +25,7 @@ def clear_flags(cards: List[Card]) -> Tuple[int, List[str]]:
                 problems.append(f"{card.location}: line no longer exists, not changed")
                 continue
             added, _, question = parse_added(lines[index])
-            if not added or question != card.question.split("\n", 1)[0]:
+            if not added or question != card.first_question_line:
                 problems.append(f"{card.location}: line changed since parsing, not changed")
                 continue
             lines[index] = question
@@ -58,8 +58,7 @@ def write_flags(cards: List[Tuple[Card, str]]) -> Tuple[int, List[str]]:
                 problems.append(f"{card.location}: line no longer exists, not flagged")
                 continue
             _, existing_id, question = parse_added(lines[index])
-            first_question_line = card.question.split("\n", 1)[0]
-            if question != first_question_line:
+            if question != card.first_question_line:
                 problems.append(f"{card.location}: question changed since parsing, not flagged")
                 continue
             if existing_id == card_id:
