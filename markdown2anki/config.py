@@ -33,7 +33,7 @@ class Config:
     subdirectories: Dict[str, str] = field(default_factory=lambda: dict(DEFAULT_SUBDIRECTORIES))
     ignore: List[str] = field(default_factory=lambda: list(DEFAULT_IGNORE))
     display: Dict[str, str] = field(default_factory=dict)  # tag -> title shown on the card
-    target: str = "apkg"  # default export target for `m2a sync`: "apkg" or "anki"
+    target: str = "anki"  # default export target for `m2a sync`: "anki" (AnkiConnect) or "apkg"
     anki_connect_url: str = "http://127.0.0.1:8765"
     anki_basic_model: str = "M2A Basic"  # note type names used by --target anki
     anki_cloze_model: str = "M2A Cloze"
@@ -101,9 +101,12 @@ def load_config(path: Optional[Path] = None) -> Config:
     output_dir = Path(data.get("output_dir", "."))
     if not output_dir.is_absolute():
         output_dir = base / output_dir
+    vault_path = Path(vault).expanduser()
+    if not vault_path.is_absolute():
+        vault_path = (base / vault_path).resolve()  # relative to the config file, never to the cwd
 
     cfg = Config(
-        vault=Path(vault),
+        vault=vault_path,
         package_name=data.get("package_name", "Anki"),
         base_tag=data.get("base_tag", ""),
         deck=data.get("deck", ""),
@@ -112,7 +115,7 @@ def load_config(path: Optional[Path] = None) -> Config:
         subdirectories=dict(data.get("subdirectories", DEFAULT_SUBDIRECTORIES)),
         ignore=list(data.get("ignore", DEFAULT_IGNORE)),
         display=dict(data.get("display", {})),
-        target=data.get("target", "apkg"),
+        target=data.get("target", "anki"),
         anki_connect_url=data.get("anki_connect_url", "http://127.0.0.1:8765"),
         anki_basic_model=data.get("anki_basic_model", "M2A Basic"),
         anki_cloze_model=data.get("anki_cloze_model", "M2A Cloze"),
@@ -176,7 +179,7 @@ def render_toml(cfg: Config) -> str:
         f"base_tag = {quote(cfg.base_tag)}",
         f"# Where the .apkg and image-occlusion exports are written (relative to this file).",
         f"output_dir = {quote(str(cfg.output_dir))}",
-        "# Default target for `m2a sync`: \"apkg\" writes a package file, \"anki\" pushes via AnkiConnect.",
+        "# Default target for `m2a sync`: \"anki\" pushes via AnkiConnect, \"apkg\" writes a package file.",
         f"target = {quote(cfg.target)}",
         f"anki_connect_url = {quote(cfg.anki_connect_url)}",
         "# Note type names used with `sync --target anki` (created on first use if missing).",

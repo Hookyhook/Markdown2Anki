@@ -12,7 +12,7 @@ from . import ui
 from .build import build
 from .config import (CONFIG_FILE_NAME, Config, config_from_env, find_config, load_config, render_toml,
                      sanitize_tag, user_config_path)
-from .flags import write_flags
+from .flags import clear_flags, write_flags
 from .parser import Card, Diagnostic
 from .vault import discover, parse_sources
 
@@ -40,6 +40,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_status = sub.add_parser("status", help="per course: cards total / added / pending")
     p_status.add_argument("--course", help="only this course")
 
+    p_unflag = sub.add_parser("unflag", help="remove ADDED flags so cards are exported again as new cards")
+    p_unflag.add_argument("--course", help="only this course (folder name or tag; glob or substring)")
+    p_unflag.add_argument("--file", type=Path, help="only this note")
+    p_unflag.add_argument("--legacy", action="store_true", help="only old `ADDED: ` flags without an id")
+    p_unflag.add_argument("--apkg", action="store_true", help="only cards exported via .apkg (hex ids)")
+    p_unflag.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation")
+
     p_sync = sub.add_parser("sync", help="export pending cards and mark them as added")
     p_sync.add_argument("--course", help="only this course (folder name or tag; glob or substring)")
     p_sync.add_argument("--target", choices=["apkg", "anki"], default=None,
@@ -64,6 +71,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             return cmd_status(cfg, args)
         if args.command == "sync":
             return cmd_sync(cfg, args)
+        if args.command == "unflag":
+            return cmd_unflag(cfg, args)
     except (FileNotFoundError, ValueError) as exc:
         _error(str(exc))
         return 2
@@ -242,6 +251,42 @@ def cmd_status(cfg: Config, args: argparse.Namespace) -> int:
     problems = [d for d in diagnostics if d.level != "info"]
     if problems:
         print(f"  {_summary_line(problems)}  {ui.dim('- run `m2a check`')}")
+    return 0
+
+
+def cmd_unflag(cfg: Config, args: argparse.Namespace) -> int:
+    from .ids import is_anki_note_id
+    sources, cards, diagnostics = _collect(cfg, args.course)
+    chosen = [c for c in cards if c.added]
+    if args.file:
+        wanted = args.file.expanduser().resolve()
+        chosen = [c for c in chosen if c.file.resolve() == wanted]
+    if args.legacy:
+        chosen = [c for c in chosen if c.card_id is None]
+    if args.apkg:
+        chosen = [c for c in chosen if c.card_id is not None and not is_anki_note_id(c.card_id)]
+
+    print(ui.header("m2a unflag") + ui.dim(f"  {cfg.vault}"))
+    if not chosen:
+        print(f"  {ui.dim('no flagged cards match')}")
+        return 0
+    rows = []
+    for card in chosen:
+        kind = "legacy" if card.card_id is None else ("anki" if is_anki_note_id(card.card_id) else "apkg")
+        rows.append([ui.dim(kind), f"{_rel(card.file, cfg)}:{card.line}", card.question.split("\n", 1)[0][:60]])
+    print("  " + ui.table(rows, ["origin", "where", "question"]).replace("\n", "\n  "))
+    print()
+    print(f"  {ui.yellow('note:')} unflagged cards are exported again as {ui.bold('new')} notes; "
+          f"delete the old ones in Anki yourself if they were imported.")
+    if not args.yes:
+        answer = input(f"  remove the flag from {ui.bold(str(len(chosen)))} card(s)? [y/N] ")
+        if answer.strip().lower() not in ("y", "yes"):
+            print(f"  {ui.dim('nothing changed')}")
+            return 0
+    cleared, problems = clear_flags(chosen)
+    print(f"  {ui.green('✓')} unflagged {ui.bold(str(cleared))} card(s)")
+    for problem in problems:
+        print(f"    {ui.level('warning')} {problem}")
     return 0
 
 

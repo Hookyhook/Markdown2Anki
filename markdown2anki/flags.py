@@ -8,6 +8,34 @@ from .ids import added_prefix, parse_added
 from .parser import Card
 
 
+def clear_flags(cards: List[Card]) -> Tuple[int, List[str]]:
+    """Remove the ADDED prefix from ``cards`` so they are exported again as new cards."""
+    by_file: Dict[Path, List[Card]] = {}
+    for card in cards:
+        by_file.setdefault(card.file, []).append(card)
+
+    cleared = 0
+    problems: List[str] = []
+    for path, entries in by_file.items():
+        lines = path.read_text(encoding="utf-8").split("\n")
+        changed = False
+        for card in entries:
+            index = card.line - 1
+            if index >= len(lines):
+                problems.append(f"{card.location}: line no longer exists, not changed")
+                continue
+            added, _, question = parse_added(lines[index])
+            if not added or question != card.question.split("\n", 1)[0]:
+                problems.append(f"{card.location}: line changed since parsing, not changed")
+                continue
+            lines[index] = question
+            changed = True
+            cleared += 1
+        if changed:
+            path.write_text("\n".join(lines), encoding="utf-8")
+    return cleared, problems
+
+
 def write_flags(cards: List[Tuple[Card, str]]) -> Tuple[int, List[str]]:
     """Mark ``cards`` (paired with their new id) as added, grouped per file.
 

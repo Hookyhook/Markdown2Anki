@@ -92,11 +92,16 @@ m2a sync --dry-run            # list what would be exported
 m2a sync --course compiler    # only courses whose folder or tag matches (glob or substring)
 m2a sync --no-flag            # export without touching the notes
 m2a sync --update             # re-export flagged cards too -> updates them in Anki (same target only)
+m2a unflag --course compiler  # drop ADDED flags -> cards go out again as NEW notes (--legacy / --apkg / --file)
 m2a sync --target anki -y     # push via AnkiConnect without asking
 ```
 
 Flags are written only after the export succeeded, and only if the question line is still what was
 parsed. Cards flagged by an older version (`ADDED: ` without id) are skipped and cannot be updated.
+
+To export a card **again as a new note** - after a test on a throw-away profile, after deleting it in
+Anki, or to move old `ADDED:` cards to the new flow - remove its flag with `m2a unflag` (filters:
+`--course`, `--file`, `--legacy`, `--apkg`). It lists the cards and asks before touching the notes.
 
 The deck id is derived from the deck name and note GUIDs from the card id, so re-importing an `.apkg`
 updates notes instead of duplicating them.
@@ -115,7 +120,7 @@ package_name = "SUTD-Anki"
 deck = "SUTD-Anki"            # use :: for subdecks
 base_tag = "SUTD"
 output_dir = "output"
-target = "anki"               # default for `m2a sync`: "apkg" or "anki"
+target = "anki"               # default for `m2a sync`; "apkg" writes a package file instead
 cloze_notes = true            # {{c1::}} markers in a Cloze card -> real cloze note
 ignore = [".git", ".obsidian", "Archive", "templates"]
 

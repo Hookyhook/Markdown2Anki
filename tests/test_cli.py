@@ -36,7 +36,7 @@ def vault(tmp_path):
     (v / "50.054 Compiler" / "Unknown" / "x.md").write_text("---\nq\na\n", encoding="utf-8")
     (v / "Archive" / "Old" / "Anki - Lectures").mkdir(parents=True)
     (v / "templates").mkdir()
-    cfg = Config(vault=v, package_name="Test", base_tag="SUTD", output_dir=tmp_path / "out")
+    cfg = Config(vault=v, package_name="Test", base_tag="SUTD", output_dir=tmp_path / "out", target="apkg")
     cfg_path = tmp_path / "m2a.toml"
     cfg_path.write_text(render_toml(cfg), encoding="utf-8")
     return v, cfg_path
@@ -189,3 +189,29 @@ def test_init_needs_a_vault(tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
     assert run("init") == 2
     assert "--vault" in capsys.readouterr().err
+
+
+def test_unflag(vault, capsys):
+    v, cfg_path = vault
+    note = v / "50.054 Compiler" / "Anki - Lectures" / "W01 Intro.md"
+    assert run("-c", cfg_path, "sync", "--yes", "--target", "apkg") == 0
+    assert note.read_text(encoding="utf-8").count("ADDED[") == 3
+    # --legacy touches only the old-style flag
+    assert run("-c", cfg_path, "unflag", "--legacy", "--yes") == 0
+    text = note.read_text(encoding="utf-8")
+    assert "ADDED: already exported" not in text and text.count("ADDED[") == 3
+    # --apkg clears the hex-id ones; they are pending again
+    assert run("-c", cfg_path, "unflag", "--apkg", "--yes") == 0
+    assert "ADDED" not in note.read_text(encoding="utf-8")
+    run("-c", cfg_path, "status")
+    assert "4" in capsys.readouterr().out
+
+
+def test_relative_vault_resolves_against_config_file(tmp_path, monkeypatch):
+    (tmp_path / "cfg").mkdir()
+    (tmp_path / "cfg" / "vault" / "C" / "Anki - Lectures").mkdir(parents=True)
+    (tmp_path / "cfg" / "m2a.toml").write_text('vault = "vault"\n', encoding="utf-8")
+    monkeypatch.chdir(tmp_path)  # a different cwd
+    cfg = load_config(tmp_path / "cfg" / "m2a.toml")
+    assert cfg.vault == (tmp_path / "cfg" / "vault").resolve()
+    assert cfg.target == "anki"
