@@ -44,7 +44,6 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_unflag.add_argument("--course", help="only this course (folder name or tag; glob or substring)")
     p_unflag.add_argument("--file", type=Path, help="only this note")
     p_unflag.add_argument("--legacy", action="store_true", help="only old `ADDED: ` flags without an id")
-    p_unflag.add_argument("--apkg", action="store_true", help="only cards exported via .apkg (hex ids)")
     p_unflag.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation")
 
     p_sync = sub.add_parser("sync", help="export pending cards and mark them as added")
@@ -76,7 +75,21 @@ def main(argv: Optional[List[str]] = None) -> int:
     except (FileNotFoundError, ValueError) as exc:
         _error(str(exc))
         return 2
+    except KeyboardInterrupt:
+        print()
+        print(ui.dim("aborted - nothing written"))
+        return 130
     return 0
+
+
+def _confirm(question: str) -> bool:
+    print()
+    try:
+        answer = input(f"  {ui.bold(question)} [y/N] ")
+    except EOFError:
+        print()
+        return False
+    return answer.strip().lower() in ("y", "yes")
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -255,7 +268,6 @@ def cmd_status(cfg: Config, args: argparse.Namespace) -> int:
 
 
 def cmd_unflag(cfg: Config, args: argparse.Namespace) -> int:
-    from .ids import is_anki_note_id
     sources, cards, diagnostics = _collect(cfg, args.course)
     chosen = [c for c in cards if c.added]
     if args.file:
@@ -263,8 +275,6 @@ def cmd_unflag(cfg: Config, args: argparse.Namespace) -> int:
         chosen = [c for c in chosen if c.file.resolve() == wanted]
     if args.legacy:
         chosen = [c for c in chosen if c.card_id is None]
-    if args.apkg:
-        chosen = [c for c in chosen if c.card_id is not None and not is_anki_note_id(c.card_id)]
 
     print(ui.header("m2a unflag") + ui.dim(f"  {cfg.vault}"))
     if not chosen:
@@ -272,17 +282,15 @@ def cmd_unflag(cfg: Config, args: argparse.Namespace) -> int:
         return 0
     rows = []
     for card in chosen:
-        kind = "legacy" if card.card_id is None else ("anki" if is_anki_note_id(card.card_id) else "apkg")
-        rows.append([ui.dim(kind), f"{_rel(card.file, cfg)}:{card.line}", card.question.split("\n", 1)[0][:60]])
-    print("  " + ui.table(rows, ["origin", "where", "question"]).replace("\n", "\n  "))
+        rows.append([ui.dim(card.card_id or "legacy"), f"{_rel(card.file, cfg)}:{card.line}",
+                     card.question.split("\n", 1)[0][:60]])
+    print("  " + ui.table(rows, ["id", "where", "question"]).replace("\n", "\n  "))
     print()
     print(f"  {ui.yellow('note:')} unflagged cards are exported again as {ui.bold('new')} notes; "
           f"delete the old ones in Anki yourself if they were imported.")
-    if not args.yes:
-        answer = input(f"  remove the flag from {ui.bold(str(len(chosen)))} card(s)? [y/N] ")
-        if answer.strip().lower() not in ("y", "yes"):
-            print(f"  {ui.dim('nothing changed')}")
-            return 0
+    if not args.yes and not _confirm(f"remove the flag from {len(chosen)} card(s)?"):
+        print(f"  {ui.dim('nothing changed')}")
+        return 0
     cleared, problems = clear_flags(chosen)
     print(f"  {ui.green('✓')} unflagged {ui.bold(str(cleared))} card(s)")
     for problem in problems:
@@ -355,12 +363,10 @@ def cmd_sync(cfg: Config, args: argparse.Namespace) -> int:
     if not new_flags:
         return 0
     files = {card.file for card, _ in new_flags}
-    if not args.yes:
-        answer = input(f"  mark {ui.bold(str(len(new_flags)))} card(s) in {len(files)} note(s) as ADDED? [y/N] ")
-        if answer.strip().lower() not in ("y", "yes"):
-            print(f"  {ui.yellow('flags not written')} - the same cards will be exported again next time; "
-                  f"re-run with --update if they were imported")
-            return 0
+    if not args.yes and not _confirm(f"mark {len(new_flags)} card(s) in {len(files)} note(s) as ADDED?"):
+        print(f"  {ui.yellow('flags not written')} - the same cards will be exported again next time; "
+              f"re-run with --update if they were imported")
+        return 0
     flagged, problems_written = write_flags(new_flags)
     print(f"  {ui.green('✓')} flagged {ui.bold(str(flagged))} card(s) in {len(files)} note(s)")
     for problem in problems_written:

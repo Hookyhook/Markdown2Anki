@@ -84,8 +84,9 @@ def test_sync_apkg_flags_and_update(vault, capsys, tmp_path):
     assert "flagged 3 card(s)" in out
 
     text = note.read_text(encoding="utf-8")
-    assert text.count("ADDED[") == 3 and "ADDED: already exported" in text
-    assert text.split("What is a token?")[0].endswith("]: ") and "ADDED[" in text.split("What is a token?")[0][-18:]
+    import re
+    assert len(re.findall(r"%%[0-9a-z]{6}%%", text)) == 3 and "ADDED: already exported\n" in text
+    assert re.search(r"^ADDED: What is a token\? %%[0-9a-z]{6}%%$", text, re.M)
 
     # second run: nothing pending
     assert run("-c", cfg_path, "sync", "--yes") == 0
@@ -163,7 +164,7 @@ def test_update_across_targets_is_refused(vault, capsys, monkeypatch):
                     encoding="utf-8")
     assert run("-c", cfg_path, "sync", "--yes", "--update", "--no-flag") == 0
     out = capsys.readouterr().out
-    assert "pushed via AnkiConnect earlier" in out and "new 2" in out
+    assert "an .apkg cannot update it" in out and "new 2" in out
 
 
 def test_init_writes_user_config_by_default_and_refuses_twice(tmp_path, monkeypatch, capsys):
@@ -195,13 +196,13 @@ def test_unflag(vault, capsys):
     v, cfg_path = vault
     note = v / "50.054 Compiler" / "Anki - Lectures" / "W01 Intro.md"
     assert run("-c", cfg_path, "sync", "--yes", "--target", "apkg") == 0
-    assert note.read_text(encoding="utf-8").count("ADDED[") == 3
+    assert note.read_text(encoding="utf-8").count("%%") == 6
     # --legacy touches only the old-style flag
     assert run("-c", cfg_path, "unflag", "--legacy", "--yes") == 0
     text = note.read_text(encoding="utf-8")
-    assert "ADDED: already exported" not in text and text.count("ADDED[") == 3
-    # --apkg clears the hex-id ones; they are pending again
-    assert run("-c", cfg_path, "unflag", "--apkg", "--yes") == 0
+    assert "ADDED: already exported" not in text and text.count("%%") == 6
+    # without a filter every flagged card is cleared; they are pending again
+    assert run("-c", cfg_path, "unflag", "--yes") == 0
     assert "ADDED" not in note.read_text(encoding="utf-8")
     run("-c", cfg_path, "status")
     assert "4" in capsys.readouterr().out

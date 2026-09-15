@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Tuple
 
 from ..build import MODEL_CLOZE, BuildResult, RenderedNote
 from ..config import Config
-from ..ids import anki_note_id, is_anki_note_id
+from ..ids import anki_note_id, is_anki_note_id, new_card_id, search_query, with_marker
 from ..parser import Diagnostic
 from ..NoteTypes.note_types import BASIC_MODEL_ID, CLOZE_MODEL_ID, templates
 from ..parser import Card
@@ -78,63 +78,71 @@ class AnkiConnect:
                 self.invoke("storeMediaFile", filename=path.name, data=data)
 
 
-def _note_payload(note: RenderedNote, deck: str, basic_model: str, cloze_model: str) -> Dict[str, Any]:
+def _fields(note: RenderedNote, card_id: str) -> Dict[str, str]:
+    back = with_marker(note.fields[1], card_id)
     if note.model == MODEL_CLOZE:
-        return {"deckName": deck, "modelName": cloze_model,
-                "fields": {"Text": note.fields[0], "Back Extra": note.fields[1]}, "tags": note.tags,
-                "options": {"allowDuplicate": True}}
-    return {"deckName": deck, "modelName": basic_model,
-            "fields": {"Front": note.fields[0], "Back": note.fields[1]}, "tags": note.tags,
+        return {"Text": note.fields[0], "Back Extra": back}
+    return {"Front": note.fields[0], "Back": back}
+
+
+def _note_payload(note: RenderedNote, card_id: str, deck: str, basic_model: str, cloze_model: str) -> Dict[str, Any]:
+    model = cloze_model if note.model == MODEL_CLOZE else basic_model
+    return {"deckName": deck, "modelName": model, "fields": _fields(note, card_id), "tags": note.tags,
             "options": {"allowDuplicate": True}}
+
+
+def _back_field(note: RenderedNote) -> str:
+    return "Back Extra" if note.model == MODEL_CLOZE else "Back"
 
 
 def export_ankiconnect(result: BuildResult, cfg: Config,
                        diagnostics: List[Diagnostic] = None) -> Tuple[List[Tuple[Card, str]], int, int]:
-    """Add new notes and update notes that already carry an Anki note id. Returns (flags, added, updated).
+    """Add new notes; update already-exported ones in place. Returns (flags, added, updated).
 
-    Cards that were exported through an .apkg (hex id) cannot be updated here - Anki's note id is unknown -
-    so they are skipped with a warning instead of being added a second time.
+    An exported card is found again either by the ``<!--m2a:id-->`` marker embedded in its back field
+    (cards exported by this version, through either target) or, for cards flagged by the previous
+    version, by the Anki note id stored as ``n<id>``. A card that cannot be found is skipped with a warning.
     """
     diagnostics = diagnostics if diagnostics is not None else []
-    kept = []
-    for note in result.notes:
-        if note.card.added and not is_anki_note_id(note.card.card_id):
-            diagnostics.append(Diagnostic(note.card.file, note.card.line, "warning",
-                                          "exported via .apkg earlier; cannot be updated through AnkiConnect "
-                                          "(use `--target apkg --update`), skipped"))
-            continue
-        kept.append(note)
-    result.notes = kept
     client = AnkiConnect(cfg.anki_connect_url)
     basic_model, cloze_model = client.resolve_models(cfg, need_cloze=any(n.model == MODEL_CLOZE
                                                                           for n in result.notes))
     client.ensure_deck(cfg.deck)
     client.store_media(result.notes)
 
-    to_add: List[RenderedNote] = []
-    to_update: List[RenderedNote] = []
-    for note in result.notes:
-        if is_anki_note_id(note.card.card_id):
-            to_update.append(note)
-        else:
-            to_add.append(note)
-
     flags: List[Tuple[Card, str]] = []
     updated = 0
-    for note in to_update:
-        note_id = anki_note_id(note.card.card_id)  # type: ignore[arg-type]
-        payload = _note_payload(note, cfg.deck, basic_model, cloze_model)
-        client.invoke("updateNoteFields", note={"id": note_id, "fields": payload["fields"]})
-        client.invoke("addTags", notes=[note_id], tags=" ".join(note.tags))
+    to_add: List[Tuple[RenderedNote, str]] = []
+    for note in result.notes:
+        card_id = note.card.card_id
+        if not note.card.added or not card_id:
+            to_add.append((note, new_card_id()))
+            continue
+        if is_anki_note_id(card_id):
+            # Flagged by the previous version with Anki's note id: update by id and migrate the card to a
+            # short id (embedded now, re-flagged below) so it works like every other card from here on.
+            note_ids = [anki_note_id(card_id)]
+            card_id = new_card_id()
+        else:
+            note_ids = client.invoke("findNotes", query=search_query(_back_field(note), card_id)) or []
+        if not note_ids:
+            diagnostics.append(Diagnostic(note.card.file, note.card.line, "warning",
+                                          "not found in Anki (deleted, other profile, or exported before ids "
+                                          "were embedded) - `m2a unflag --file ...` to add it again; skipped"))
+            continue
+        client.invoke("updateNoteFields", note={"id": note_ids[0], "fields": _fields(note, card_id)})
+        client.invoke("addTags", notes=note_ids[:1], tags=" ".join(note.tags))
+        if card_id != note.card.card_id:
+            flags.append((note.card, card_id))
         updated += 1
 
     added = 0
     if to_add:
-        ids = client.invoke("addNotes", notes=[_note_payload(n, cfg.deck, basic_model, cloze_model)
-                                               for n in to_add])
-        for note, note_id in zip(to_add, ids):
+        ids = client.invoke("addNotes", notes=[_note_payload(n, cid, cfg.deck, basic_model, cloze_model)
+                                               for n, cid in to_add])
+        for (note, card_id), note_id in zip(to_add, ids):
             if note_id is None:
                 continue
-            flags.append((note.card, f"n{note_id}"))
+            flags.append((note.card, card_id))
             added += 1
     return flags, added, updated

@@ -25,9 +25,7 @@ Two ways to get cards into Anki:
   [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on (code `2055492159`), keep Anki
   open, and `m2a sync` pushes the cards straight into the deck - no import step.
 
-Pick one and stay with it: a card carries the id of the target that created it (`ADDED[7f3a9c2e]:` from
-a package, `ADDED[n1694…]:` from AnkiConnect) and can only be *updated* through that same target. Trying
-the other one skips the card with a warning instead of creating a duplicate.
+Both targets embed the same id in the note, so a card can be updated through either one later.
 
 **Trying it on a throw-away Anki profile first?** Run `m2a sync --no-flag`. Flags written against a test
 profile carry ids that mean nothing in your real one.
@@ -85,23 +83,28 @@ prose become `→` and `⇒`. `$5 and $10` is prose, `$x$` is math.
 1. Parse all notes, build the pending cards (and, with `--update`, the already-added ones that have an id).
 2. Export them - `.apkg`, or straight into a running Anki via `--target anki` (needs the
    [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on). `target` in the config sets the default.
-3. Ask, then write `ADDED[<id>]: ` in front of each exported question, so the next run skips it.
+3. Ask, then flag each exported question: `ADDED: <question> %%k3f9qz%%`. The `%%…%%` part is an Obsidian
+   comment (hidden in reading view) holding a short id; the same id is embedded invisibly in the Anki note.
 
 ```
 m2a sync --dry-run            # list what would be exported
 m2a sync --course compiler    # only courses whose folder or tag matches (glob or substring)
 m2a sync --no-flag            # export without touching the notes
-m2a sync --update             # re-export flagged cards too -> updates them in Anki (same target only)
-m2a unflag --course compiler  # drop ADDED flags -> cards go out again as NEW notes (--legacy / --apkg / --file)
+m2a sync --update             # re-export flagged cards too -> updates them in Anki
+m2a unflag --course compiler  # drop ADDED flags -> cards go out again as NEW notes (--legacy / --file)
 m2a sync --target anki -y     # push via AnkiConnect without asking
 ```
 
 Flags are written only after the export succeeded, and only if the question line is still what was
 parsed. Cards flagged by an older version (`ADDED: ` without id) are skipped and cannot be updated.
 
+Updates work through either target: an `.apkg` re-import matches the note by GUID (derived from the id),
+AnkiConnect finds it by the embedded `<!--m2a:id-->` marker. A card that is not in Anki any more (deleted,
+other profile) is skipped with a warning.
+
 To export a card **again as a new note** - after a test on a throw-away profile, after deleting it in
 Anki, or to move old `ADDED:` cards to the new flow - remove its flag with `m2a unflag` (filters:
-`--course`, `--file`, `--legacy`, `--apkg`). It lists the cards and asks before touching the notes.
+`--course`, `--file`, `--legacy`). It lists the cards and asks before touching the notes.
 
 The deck id is derived from the deck name and note GUIDs from the card id, so re-importing an `.apkg`
 updates notes instead of duplicating them.

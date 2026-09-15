@@ -41,7 +41,8 @@ def test_uses_the_imported_note_type_by_id_even_if_name_collides(monkeypatch):
     add_call = next(p for a, p in fake.calls if a == "addNotes")
     assert add_call["notes"][0]["modelName"] == "Basic-m2a"
     assert not any(a == "createModel" for a, _ in fake.calls)
-    assert flags == [(flags[0][0], "n1000")] and added == 1 and updated == 0
+    assert len(flags[0][1]) == 6 and added == 1 and updated == 0
+    assert add_call["notes"][0]["fields"]["Back"] == f"a<!--m2a:{flags[0][1]}-->"
 
 
 def test_creates_configured_model_when_missing_and_updates_by_note_id(monkeypatch):
@@ -53,5 +54,29 @@ def test_creates_configured_model_when_missing_and_updates_by_note_id(monkeypatc
     assert ("createModel", ) == tuple(a for a, p in fake.calls if a == "createModel")[:1]
     assert next(p for a, p in fake.calls if a == "createModel")["modelName"] == "M2A Basic"
     upd = next(p for a, p in fake.calls if a == "updateNoteFields")
-    assert upd["note"]["id"] == 555 and upd["note"]["fields"] == {"Front": "q2", "Back": "a2"}
-    assert added == 1 and updated == 1 and [cid for _, cid in flags] == ["n1000"]
+    assert upd["note"]["id"] == 555 and upd["note"]["fields"]["Front"] == "q2"
+    assert upd["note"]["fields"]["Back"].startswith("a2<!--m2a:")
+    assert added == 1 and updated == 1
+    assert len(flags) == 2 and all(len(cid) == 6 for _, cid in flags)  # new card + migrated legacy card
+
+
+def test_update_finds_note_by_embedded_marker(monkeypatch):
+    fake = FakeAnki({"Basic": 1234})
+    calls = fake.invoke
+
+    def invoke(action, **params):
+        if action == "findNotes":
+            fake.calls.append((action, params))
+            return [777] if "m2a:abc123-->" in params["query"] else []
+        return calls(action, **params)
+    fake.invoke = invoke
+    cfg = Config(vault=Path("."), deck="D")
+    notes = [RenderedNote(_card(3, added=True, card_id="abc123"), "basic", ["q", "a"], ["T"]),
+             RenderedNote(_card(9, added=True, card_id="zzz999"), "basic", ["q", "a"], ["T"])]
+    diags = []
+    monkeypatch.setattr(ankiconnect.AnkiConnect, "invoke", lambda self, action, **p: fake.invoke(action, **p))
+    from markdown2anki.build import BuildResult
+    flags, added, updated = ankiconnect.export_ankiconnect(BuildResult(notes=notes), cfg, diags)
+    assert updated == 1 and added == 0 and flags == []
+    assert next(p for a, p in fake.calls if a == "updateNoteFields")["note"]["id"] == 777
+    assert len(diags) == 1 and "not found in Anki" in diags[0].message and diags[0].line == 9

@@ -4,7 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from .ids import added_prefix, parse_added
+from .ids import flagged_line, parse_added
 from .parser import Card
 
 
@@ -64,7 +64,7 @@ def write_flags(cards: List[Tuple[Card, str]]) -> Tuple[int, List[str]]:
                 continue
             if existing_id == card_id:
                 continue
-            lines[index] = added_prefix(card_id) + question
+            lines[index] = flagged_line(question, card_id)
             changed = True
             flagged += 1
         if changed:
