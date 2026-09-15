@@ -58,7 +58,7 @@ def test_check_and_status(vault, capsys):
     v, cfg_path = vault
     assert run("-c", cfg_path, "check") == 0
     out = capsys.readouterr().out
-    assert "cards: 4" in out and "pending: 3" in out and "added: 1" in out
+    assert "cards 4" in out and "pending 3" in out and "added 1" in out
     assert "under 'Unknown'" in out
 
     run("-c", cfg_path, "status")
@@ -70,7 +70,7 @@ def test_sync_dry_run_writes_nothing(vault, capsys):
     v, cfg_path = vault
     before = (v / "50.054 Compiler" / "Anki - Lectures" / "W01 Intro.md").read_text(encoding="utf-8")
     assert run("-c", cfg_path, "sync", "--dry-run") == 0
-    assert "3 new" in capsys.readouterr().out
+    assert "new 3" in capsys.readouterr().out
     assert (v / "50.054 Compiler" / "Anki - Lectures" / "W01 Intro.md").read_text(encoding="utf-8") == before
     assert not (cfg_path.parent / "out").exists()
 
@@ -94,7 +94,7 @@ def test_sync_apkg_flags_and_update(vault, capsys, tmp_path):
     # --update re-exports the three cards with ids, but never the legacy one
     assert run("-c", cfg_path, "sync", "--yes", "--update", "--dry-run") == 0
     out = capsys.readouterr().out
-    assert "3 update(s)" in out and "0 new" in out
+    assert "updates 3" in out and "new 0" in out
 
 
 def test_flag_guard_when_note_edited(vault, capsys, monkeypatch):
@@ -116,7 +116,7 @@ def test_init_migrates_env(tmp_path, monkeypatch, capsys):
         'SUBJECT_TAG_DICTIONARY={"50.020 Network Security": "50.020_NetSec"}\n'
         'SUB_DIRECTORY_TAG_DICTIONARY={"Anki - Lectures": "Lectures", "Anki - Exercises": "Exercises"}\n'
         'IGNORE_DIRECTORIES=[".git", "Archive", "Exercises"]\n', encoding="utf-8")
-    assert run("init") == 0
+    assert run("init", "--here") == 0
     cfg = load_config(tmp_path / "m2a.toml")
     assert cfg.package_name == "SUTD-Anki"
     assert cfg.subjects == {"50.020 Network Security": "50.020_NetSec"}
@@ -163,4 +163,29 @@ def test_update_across_targets_is_refused(vault, capsys, monkeypatch):
                     encoding="utf-8")
     assert run("-c", cfg_path, "sync", "--yes", "--update", "--no-flag") == 0
     out = capsys.readouterr().out
-    assert "pushed via AnkiConnect earlier" in out and "2 new" in out
+    assert "pushed via AnkiConnect earlier" in out and "new 2" in out
+
+
+def test_init_writes_user_config_by_default_and_refuses_twice(tmp_path, monkeypatch, capsys):
+    import os
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "vault" / "50.020 Network Security" / "Anki - Lectures").mkdir(parents=True)
+    assert run("init", "--vault", tmp_path / "vault") == 0
+    written = Path(os.environ["XDG_CONFIG_HOME"]) / "m2a" / "m2a.toml"
+    assert written.is_file()
+    assert "next:" in capsys.readouterr().out
+    # found from any directory
+    monkeypatch.chdir(tmp_path / "vault")
+    assert run("status") == 0
+    # a second init refuses...
+    assert run("init", "--vault", tmp_path / "vault") == 1
+    assert "already exists" in capsys.readouterr().err
+    # ...unless forced, which keeps a backup
+    assert run("init", "--vault", tmp_path / "vault", "--force") == 0
+    assert written.with_suffix(".toml.bak").is_file()
+
+
+def test_init_needs_a_vault(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert run("init") == 2
+    assert "--vault" in capsys.readouterr().err

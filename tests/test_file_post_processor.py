@@ -30,11 +30,10 @@ class TestFilePostProcessor(unittest.TestCase):
 
 def _run_post_processor(sample):
     # Create a temporary file with the sample content
-    with open(os.path.join(HERE, "test_file.md"), "w", encoding="utf-8") as f:
+    import tempfile
+    file_name = os.path.join(tempfile.mkdtemp(), "test_file.md")
+    with open(file_name, "w", encoding="utf-8") as f:
         f.write(sample)
-
-    # Get the absolute path to the file including home directory
-    file_name = os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_file.md")
 
     # Call the function to be tested
     add_added_flags_to_each_valid_card(file_name)

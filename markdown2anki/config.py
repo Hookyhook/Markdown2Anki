@@ -62,14 +62,21 @@ def sanitize_tag(name: str) -> str:
     return tag
 
 
+def user_config_path() -> Path:
+    """Global per-user location: $XDG_CONFIG_HOME/m2a/m2a.toml (default ~/.config/m2a/m2a.toml)."""
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
+    return Path(base) / "m2a" / CONFIG_FILE_NAME
+
+
 def find_config(start: Optional[Path] = None) -> Optional[Path]:
-    """Walk up from ``start`` (default: cwd) looking for m2a.toml."""
+    """Walk up from ``start`` (default: cwd) looking for m2a.toml, then fall back to the user config."""
     current = Path(start or os.getcwd()).resolve()
     for candidate in [current, *current.parents]:
         path = candidate / CONFIG_FILE_NAME
         if path.is_file():
             return path
-    return None
+    user = user_config_path()
+    return user if user.is_file() else None
 
 
 def load_config(path: Optional[Path] = None) -> Config:
@@ -80,7 +87,8 @@ def load_config(path: Optional[Path] = None) -> Config:
         env = Path(".env")
         if env.is_file():
             return config_from_env(env)
-        raise FileNotFoundError(f"No {CONFIG_FILE_NAME} found (run `m2a init`).")
+        raise FileNotFoundError(f"no {CONFIG_FILE_NAME} found here, above, or at {user_config_path()} "
+                                f"- run `m2a init --vault <path>`")
 
     with open(path, "rb") as f:
         data = tomllib.load(f)

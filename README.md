@@ -9,7 +9,7 @@ marks it as added in the notes, and can update cards later when you fix them.
 git clone <this repo> && cd Markdown2Anki
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e .                                  # gives you the `m2a` command
-m2a init --vault ~/Documents/obsidian             # writes m2a.toml, lists the courses it found
+m2a init --vault ~/Documents/obsidian             # writes ~/.config/m2a/m2a.toml, lists the courses it found
 m2a check                                         # parses every note, reports problems, changes nothing
 m2a sync --dry-run                                # shows what the first export would contain
 m2a sync                                          # exports, then asks before flagging the notes
@@ -103,8 +103,11 @@ updates notes instead of duplicating them.
 
 ## Configuration - `m2a.toml`
 
-Created by `m2a init` (migrates a legacy `.env` if one exists) and searched for upwards from the current
-directory; `-c path` overrides.
+Created by `m2a init`, which refuses to overwrite an existing config (`--force` replaces it and keeps a
+`.bak`). Lives in `~/.config/m2a/m2a.toml` so `m2a` works from any directory; `m2a init --here` writes it
+to the current directory instead (a legacy `.env` there is migrated). Lookup order: `-c path`, then
+`m2a.toml` in the current directory or any parent, then the user config. `m2a config` shows which one is
+in use.
 
 ```toml
 vault = "~/Documents/obsidian"
