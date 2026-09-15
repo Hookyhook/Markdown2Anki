@@ -19,6 +19,26 @@ def pad(text: str, width: int, right: bool = False) -> str:
     return fill + text if right else text + fill
 
 
+_TRACE = bool(os.environ.get("M2A_TRACE"))
+_T0 = None
+
+
+def trace(message: str) -> None:
+    """Phase log on stderr when M2A_TRACE=1 (or --trace) - for finding where a run stalls."""
+    global _T0
+    if not _TRACE:
+        return
+    import time
+    if _T0 is None:
+        _T0 = time.monotonic()
+    print(f"[m2a +{time.monotonic() - _T0:6.2f}s] {message}", file=sys.stderr, flush=True)
+
+
+def enable_trace() -> None:
+    global _TRACE
+    _TRACE = True
+
+
 def _enabled() -> bool:
     if os.environ.get("NO_COLOR"):
         return False

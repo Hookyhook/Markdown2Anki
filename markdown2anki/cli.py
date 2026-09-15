@@ -22,6 +22,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("-c", "--config", type=Path, help=f"path to {CONFIG_FILE_NAME} (default: search upwards, "
                                                           f"then {user_config_path()})")
     parser.add_argument("--vault", type=Path, help="override the vault directory from the config")
+    parser.add_argument("--trace", action="store_true", help="log each phase to stderr (also: M2A_TRACE=1)")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help=f"write {CONFIG_FILE_NAME} for a vault (refuses to overwrite)")
@@ -58,6 +59,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     p_sync.add_argument("-o", "--output", type=Path, help="apkg path (default: <output_dir>/<package_name>.apkg)")
 
     args = parser.parse_args(argv)
+    if args.trace:
+        ui.enable_trace()
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # show output promptly even through a pipe
+    except (AttributeError, ValueError):
+        pass
+    ui.trace(f"start: command={args.command} cwd={Path.cwd()}")
     try:
         if args.command == "init":
             return cmd_init(args)
@@ -102,9 +110,11 @@ def _error(message: str, hint: Optional[str] = None) -> None:
 
 
 def _load(args: argparse.Namespace) -> Config:
+    ui.trace("loading config")
     cfg = load_config(args.config)
     if args.vault:
         cfg.vault = args.vault.expanduser()
+    ui.trace(f"config {cfg.source}  vault {cfg.vault}")
     return cfg
 
 
@@ -140,8 +150,14 @@ def _summary_line(diagnostics: List[Diagnostic]) -> str:
 
 def _collect(cfg: Config, course: Optional[str]):
     diagnostics: List[Diagnostic] = []
+    ui.trace("discovering notes")
     sources = discover(cfg, course, diagnostics)
-    cards = parse_sources(sources, diagnostics)
+    ui.trace(f"parsing {len(sources)} note(s)")
+    cards = []
+    for source in sources:
+        ui.trace(f"  {source.path}")
+        cards.extend(parse_sources([source], diagnostics))
+    ui.trace(f"{len(cards)} card(s)")
     return sources, cards, diagnostics
 
 
