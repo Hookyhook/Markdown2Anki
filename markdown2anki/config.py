@@ -98,7 +98,7 @@ def load_config(path: Optional[Path] = None) -> Config:
         raise ValueError(f"{path}: 'vault' is required")
 
     base = path.parent
-    output_dir = Path(data.get("output_dir", "."))
+    output_dir = Path(data.get("output_dir", ".")).expanduser()
     if not output_dir.is_absolute():
         output_dir = base / output_dir
     vault_path = Path(vault).expanduser()

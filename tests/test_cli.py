@@ -215,3 +215,11 @@ def test_relative_vault_resolves_against_config_file(tmp_path, monkeypatch):
     cfg = load_config(tmp_path / "cfg" / "m2a.toml")
     assert cfg.vault == (tmp_path / "cfg" / "vault").resolve()
     assert cfg.target == "anki"
+
+
+def test_tilde_in_output_dir(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "v" / "C" / "Anki - Lectures").mkdir(parents=True)
+    (tmp_path / "m2a.toml").write_text('vault = "v"\noutput_dir = "~/Downloads/M2A"\n', encoding="utf-8")
+    cfg = load_config(tmp_path / "m2a.toml")
+    assert cfg.output_dir == tmp_path / "Downloads" / "M2A"
