@@ -183,3 +183,6 @@ cython_debug/
 /markdown2anki/NoteTypes/Cloze/back.html
 /markdown2anki/NoteTypes/Cloze/front.html
 /markdown2anki/NoteTypes/Cloze/styling.css
+
+# personal m2a configuration (vault path etc.) - create with `m2a init`
+/m2a.toml

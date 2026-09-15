@@ -12,3 +12,10 @@
 .nightMode .cloze {
     color: lightblue;
 }
+
+.subject {
+  font-family: arial;
+  font-size: 14px;
+  text-align: right;
+  color: #3c81e3;
+}
