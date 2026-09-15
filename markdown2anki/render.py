@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple
 
 import markdown
 
-from .helpers.text_formatting import (
+from .formatting import (
     format_bullet_points,
     html_new_line_processor,
     ignore_image_resizing_in_html,

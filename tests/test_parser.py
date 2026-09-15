@@ -39,11 +39,13 @@ def test_single_character_file_name_does_not_crash():
 
 
 def test_added_prefixes():
-    text = "---\nADDED: old\nx\n---\nADDED[7f3a9c2e]: hex\nx\n---\nADDED[n1694687123456]: anki\nx\n---\nnew\nx"
+    text = ("---\nADDED: old\nx\n---\nADDED[7f3a9c2e]: hex\nx\n---\nADDED[n1694687123456]: anki\nx\n"
+            "---\nADDED: current %%k3f9qz%%\nx\n---\nnew\nx")
     cards, _ = parse(text)
     assert [(c.added, c.card_id, c.question) for c in cards] == [
-        (True, None, "old"), (True, "7f3a9c2e", "hex"), (True, "n1694687123456", "anki"), (False, None, "new")]
-    assert [c.updatable for c in cards] == [False, True, True, False]
+        (True, None, "old"), (True, "7f3a9c2e", "hex"), (True, "n1694687123456", "anki"),
+        (True, "k3f9qz", "current"), (False, None, "new")]
+    assert [c.updatable for c in cards] == [False, True, True, True, False]
 
 
 def test_cloze_kinds():

@@ -4,8 +4,36 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from .ids import added_prefix, parse_added
+from .ids import flagged_line, parse_added
 from .parser import Card
+
+
+def clear_flags(cards: List[Card]) -> Tuple[int, List[str]]:
+    """Remove the ADDED prefix from ``cards`` so they are exported again as new cards."""
+    by_file: Dict[Path, List[Card]] = {}
+    for card in cards:
+        by_file.setdefault(card.file, []).append(card)
+
+    cleared = 0
+    problems: List[str] = []
+    for path, entries in by_file.items():
+        lines = path.read_text(encoding="utf-8").split("\n")
+        changed = False
+        for card in entries:
+            index = card.line - 1
+            if index >= len(lines):
+                problems.append(f"{card.location}: line no longer exists, not changed")
+                continue
+            added, _, question = parse_added(lines[index])
+            if not added or question != card.first_question_line:
+                problems.append(f"{card.location}: line changed since parsing, not changed")
+                continue
+            lines[index] = question
+            changed = True
+            cleared += 1
+        if changed:
+            path.write_text("\n".join(lines), encoding="utf-8")
+    return cleared, problems
 
 
 def write_flags(cards: List[Tuple[Card, str]]) -> Tuple[int, List[str]]:
@@ -30,13 +58,12 @@ def write_flags(cards: List[Tuple[Card, str]]) -> Tuple[int, List[str]]:
                 problems.append(f"{card.location}: line no longer exists, not flagged")
                 continue
             _, existing_id, question = parse_added(lines[index])
-            first_question_line = card.question.split("\n", 1)[0]
-            if question != first_question_line:
+            if question != card.first_question_line:
                 problems.append(f"{card.location}: question changed since parsing, not flagged")
                 continue
             if existing_id == card_id:
                 continue
-            lines[index] = added_prefix(card_id) + question
+            lines[index] = flagged_line(question, card_id)
             changed = True
             flagged += 1
         if changed:
