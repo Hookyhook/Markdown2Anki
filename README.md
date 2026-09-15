@@ -30,7 +30,7 @@ else is reported by `m2a check`. Cards are tagged `base_tag::subject::category::
 
 ## Note format
 
-```markdown
+````markdown
 # Heading                        -> extra tag; ## nests below it
 ---
 A question on the first line
@@ -52,7 +52,7 @@ Question about code?
 #CODE#                           -> tagged TODO_PROCESS_CODE; the marker line is removed
 int x = 1;
 ```
-```
+````
 
 Rules: a line of `---` starts a card; the next non-empty line is the question; everything up to the next
 separator or heading is the answer. Blank slots (`---` followed by blank lines) are ignored. Fenced code,
